@@ -48,13 +48,9 @@ pub(crate) type SuiGraphQLSchema = async_graphql::Schema<Query, Mutation, EmptyS
 
 #[Object]
 impl Query {
-    /// First four bytes of the network's genesis checkpoint digest (uniquely identifies the
-    /// network).
     async fn chain_identifier(&self, ctx: &Context<'_>) -> Result<String> {
-        Ok(ChainIdentifier::query(ctx.data_unchecked())
-            .await
-            .extend()?
-            .to_string())
+        let chain_id: ChainIdentifier = *ctx.data()?;
+        Ok(chain_id.0.to_string())
     }
 
     /// Range of checkpoints that the RPC has data available for (for data
