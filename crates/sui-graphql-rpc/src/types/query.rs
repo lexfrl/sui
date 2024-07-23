@@ -9,6 +9,7 @@ use move_core_types::account_address::AccountAddress;
 use serde::de::DeserializeOwned;
 use sui_json_rpc_types::DevInspectArgs;
 use sui_sdk::SuiClient;
+use sui_types::digests::ChainIdentifier as NativeChainIdentifier;
 use sui_types::transaction::{TransactionData, TransactionKind};
 use sui_types::{gas_coin::GAS, transaction::TransactionDataAPI, TypeTag};
 
@@ -50,6 +51,13 @@ pub(crate) type SuiGraphQLSchema = async_graphql::Schema<Query, Mutation, EmptyS
 impl Query {
     async fn chain_identifier(&self, ctx: &Context<'_>) -> Result<String> {
         let chain_id: ChainIdentifier = *ctx.data()?;
+        // If the chain identifier is not initialized, return an error.
+        if chain_id.0 == NativeChainIdentifier::default() {
+            return Err(Error::Internal(
+                "Chain identifier not initialized.".to_string(),
+            ))
+            .extend();
+        }
         Ok(chain_id.0.to_string())
     }
 
