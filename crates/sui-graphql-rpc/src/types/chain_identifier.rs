@@ -4,7 +4,6 @@
 use crate::{
     data::{Db, DbConnection, QueryExecutor},
     error::Error,
-    server::watermark_task::ChainIdentifierLock,
 };
 use async_graphql::*;
 use diesel::{ExpressionMethods, OptionalExtension, QueryDsl};
@@ -14,7 +13,7 @@ use sui_types::{
 };
 
 #[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct ChainIdentifier(pub(crate) NativeChainIdentifier);
+pub(crate) struct ChainIdentifier(pub(crate) Option<NativeChainIdentifier>);
 
 impl ChainIdentifier {
     /// Query the Chain Identifier from the DB.
@@ -47,16 +46,16 @@ impl ChainIdentifier {
             .map_err(|e| Error::Internal(format!("Failed to deserialize genesis digest: {e}")))?;
         Ok(NativeChainIdentifier::from(genesis_digest))
     }
+}
 
-    pub(crate) async fn new(lock: ChainIdentifierLock) -> Self {
-        let w = lock.0.read().await;
-
-        Self(w.0)
+impl From<Option<NativeChainIdentifier>> for ChainIdentifier {
+    fn from(chain_identifier: Option<NativeChainIdentifier>) -> Self {
+        Self(chain_identifier)
     }
 }
 
 impl From<NativeChainIdentifier> for ChainIdentifier {
     fn from(chain_identifier: NativeChainIdentifier) -> Self {
-        Self(chain_identifier)
+        Self(Some(chain_identifier))
     }
 }

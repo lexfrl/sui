@@ -28,6 +28,7 @@ pub(crate) struct WatermarkTask {
     sender: watch::Sender<u64>,
     receiver: watch::Receiver<u64>,
 }
+
 #[derive(Clone, Default)]
 pub(crate) struct ChainIdentifierLock(pub(crate) Arc<RwLock<ChainIdentifier>>);
 
@@ -69,11 +70,7 @@ impl WatermarkTask {
         let mut interval = tokio::time::interval(self.sleep);
         // We start the task by first finding & setting the chain identifier
         // so that it can be used in all requests.
-        let cached = self.get_and_cache_chain_identifier(&mut interval).await;
-        // In case we received a cancel signal, we don't want to start the classic watermark task.
-        if !cached {
-            return;
-        };
+        self.get_and_cache_chain_identifier(&mut interval).await;
 
         loop {
             tokio::select! {
@@ -86,7 +83,7 @@ impl WatermarkTask {
                         Ok(Some(watermark)) => watermark,
                         Ok(None) => continue,
                         Err(e) => {
-                            error!("{}", e);
+                            error!("Failed to fetch chain identifier: {}", e);
                             self.metrics.inc_errors(&[ServerError::new(e.to_string(), None)]);
                             continue;
                         }
@@ -121,12 +118,12 @@ impl WatermarkTask {
     }
 
     // Fetch the chain identifier (once) from the database and cache it.
-    async fn get_and_cache_chain_identifier(&self, interval: &mut Interval) -> bool {
+    async fn get_and_cache_chain_identifier(&self, interval: &mut Interval) {
         loop {
             tokio::select! {
                 _ = self.cancel.cancelled() => {
                     info!("Shutdown signal received, terminating attempt to get chain identifier");
-                    return false;
+                    return;
                 },
                 _ = interval.tick() => {
                     // we only set the chain_identifier once.
@@ -142,7 +139,7 @@ impl WatermarkTask {
 
                     let mut chain_id_lock = self.chain_identifier.0.write().await;
                     *chain_id_lock = chain.into();
-                    return true;
+                    return;
                 }
             }
         }
@@ -179,5 +176,12 @@ impl Watermark {
             checkpoint: checkpoint as u64,
             epoch: epoch as u64,
         }))
+    }
+}
+
+impl ChainIdentifierLock {
+    pub(crate) async fn read(&self) -> ChainIdentifier {
+        let w = self.0.read().await;
+        w.0.into()
     }
 }
