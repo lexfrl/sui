@@ -102,7 +102,7 @@ mod tests {
             8001,
             9185,
             ServiceConfig::dot_move_test_defaults(
-                true,
+                true, // external resolution
                 Some(internal_client.url()),
                 Some(pkg_id.into()),
                 Some(registry_id.0),

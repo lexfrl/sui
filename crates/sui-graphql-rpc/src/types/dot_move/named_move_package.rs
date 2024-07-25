@@ -14,7 +14,9 @@ use crate::{
 };
 
 use super::{
-    config::{AppInfo, AppRecord, DotMoveConfig, DotMoveServiceError, ResolutionType, VersionedName},
+    config::{
+        AppInfo, AppRecord, DotMoveConfig, DotMoveServiceError, ResolutionType, VersionedName,
+    },
     data_loader::DotMoveDataLoader,
 };
 
