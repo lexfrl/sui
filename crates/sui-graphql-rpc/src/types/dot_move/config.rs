@@ -61,7 +61,7 @@ const DEFAULT_PAGE_LIMIT: u16 = 50;
 
 /// A regular expression that detects all possible dot move names in a type tag.
 pub(crate) static _VERSIONED_NAME_UNBOUND_REG: Lazy<Regex> =
-    Lazy::new(|| Regex::new(VERSIONED_NAME_UNBOUND_REGEX).unwrap());
+    Lazy::new(|| Regex::new(_VERSIONED_NAME_UNBOUND_REGEX).unwrap());
 
 /// A regular expression that detects a single name in the format `app@org/v1`.
 pub(crate) static VERSIONED_NAME_REG: Lazy<Regex> =
