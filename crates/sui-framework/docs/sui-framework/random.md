@@ -211,7 +211,16 @@ Unique randomness generator, derived from the global randomness.
 
 
 
-<pre><code><b>const</b> <a href="../sui-framework/random.md#0x2_random_EInvalidRandomnessUpdate">EInvalidRandomnessUpdate</a>: <a href="../move-stdlib/u64.md#0x1_u64">u64</a> = 2;
+<pre><code><b>const</b> <a href="../sui-framework/random.md#0x2_random_EInvalidRandomnessUpdate">EInvalidRandomnessUpdate</a>: <a href="../move-stdlib/u64.md#0x1_u64">u64</a> = 5;
+</code></pre>
+
+
+
+<a name="0x2_random_EInvalidRandomnessUpdateMustIncrease"></a>
+
+
+
+<pre><code><b>const</b> <a href="../sui-framework/random.md#0x2_random_EInvalidRandomnessUpdateMustIncrease">EInvalidRandomnessUpdateMustIncrease</a>: <a href="../move-stdlib/u64.md#0x1_u64">u64</a> = 2;
 </code></pre>
 
 
@@ -388,7 +397,7 @@ transaction.
         <b>assert</b>!(
             (epoch &gt; inner.epoch && new_round == 0) ||
                 (new_round == inner.randomness_round + 1),
-            <a href="../sui-framework/random.md#0x2_random_EInvalidRandomnessUpdate">EInvalidRandomnessUpdate</a>
+            <a href="../sui-framework/random.md#0x2_random_EInvalidRandomnessUpdateMustIncrease">EInvalidRandomnessUpdateMustIncrease</a>
         );
     };
 

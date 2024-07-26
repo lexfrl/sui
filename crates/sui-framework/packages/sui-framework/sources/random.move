@@ -10,9 +10,10 @@ module sui::random {
     // Sender is not @0x0 the system address.
     const ENotSystemAddress: u64 = 0;
     const EWrongInnerVersion: u64 = 1;
-    const EInvalidRandomnessUpdate: u64 = 2;
+    const EInvalidRandomnessUpdate: u64 = 5;
     const EInvalidRange: u64 = 3;
     const EInvalidLength: u64 = 4;
+    const EInvalidRandomnessUpdateMustIncrease: u64 = 2;
 
     const CURRENT_VERSION: u64 = 1;
     const RAND_OUTPUT_LEN: u16 = 32;
@@ -111,7 +112,7 @@ module sui::random {
             assert!(
                 (epoch > inner.epoch && new_round == 0) ||
                     (new_round == inner.randomness_round + 1),
-                EInvalidRandomnessUpdate
+                EInvalidRandomnessUpdateMustIncrease
             );
         };
 
