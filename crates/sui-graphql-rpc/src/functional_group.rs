@@ -33,8 +33,8 @@ pub(crate) enum FunctionalGroup {
     /// validators either directly, or through system transactions.
     SystemState,
 
-    /// DotMove Service
-    DotMoveService,
+    /// Named packages service (utilizing dotmove package registry).
+    MoveRegistry,
 }
 
 impl FunctionalGroup {
@@ -54,7 +54,7 @@ impl FunctionalGroup {
             G::NameService,
             G::Subscriptions,
             G::SystemState,
-            G::DotMoveService,
+            G::MoveRegistry,
         ];
         ALL
     }
@@ -100,7 +100,7 @@ fn functional_groups() -> &'static BTreeMap<(&'static str, &'static str), Functi
             (("Query", "networkMetrics"), G::Analytics),
             (("Query", "protocolConfig"), G::SystemState),
             (("Query", "resolveSuinsAddress"), G::NameService),
-            (("Query", "packageByName"), G::DotMoveService),
+            (("Query", "packageByName"), G::MoveRegistry),
             (("Subscription", "events"), G::Subscriptions),
             (("Subscription", "transactions"), G::Subscriptions),
             (("SystemStateSummary", "safeMode"), G::SystemState),

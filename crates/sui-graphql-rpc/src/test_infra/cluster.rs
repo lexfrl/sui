@@ -62,7 +62,7 @@ pub struct NetworkCluster {
 pub async fn start_cluster(
     graphql_connection_config: ConnectionConfig,
     internal_data_source_rpc_port: Option<u16>,
-    service_config: Option<ServiceConfig>,
+    service_config: ServiceConfig,
 ) -> Cluster {
     let network_cluster = start_network_cluster(
         graphql_connection_config.clone(),
@@ -99,8 +99,8 @@ pub async fn start_cluster(
     }
 }
 
-/// Starts a validator, fullnode, indexer (with gql ingestion). Re-using `gql's` ConnectionConfig for convenience.
-/// This does not start any GraphQl services, only the network cluster. You can start a graphql service
+/// Starts a validator, fullnode, indexer (using data ingestion). Re-using GraphQL's ConnectionConfig for convenience.
+/// This does not start any GraphQL services, only the network cluster. You can start a GraphQL service
 /// calling `start_graphql_server`.
 pub async fn start_network_cluster(
     graphql_connection_config: ConnectionConfig,
@@ -175,7 +175,7 @@ pub async fn serve_executor(
     let graphql_server_handle = start_graphql_server(
         graphql_connection_config.clone(),
         cancellation_token.clone(),
-        None,
+        ServiceConfig::test_defaults(),
     )
     .await;
 
@@ -203,7 +203,7 @@ pub async fn serve_executor(
 pub async fn start_graphql_server(
     graphql_connection_config: ConnectionConfig,
     cancellation_token: CancellationToken,
-    service_config: Option<ServiceConfig>,
+    service_config: ServiceConfig,
 ) -> JoinHandle<()> {
     start_graphql_server_with_fn_rpc(
         graphql_connection_config,
@@ -218,12 +218,12 @@ pub async fn start_graphql_server_with_fn_rpc(
     graphql_connection_config: ConnectionConfig,
     fn_rpc_url: Option<String>,
     cancellation_token: Option<CancellationToken>,
-    service_config: Option<ServiceConfig>,
+    service_config: ServiceConfig,
 ) -> JoinHandle<()> {
     let cancellation_token = cancellation_token.unwrap_or_default();
     let mut server_config = ServerConfig {
         connection: graphql_connection_config,
-        service: service_config.unwrap_or(ServiceConfig::test_defaults()),
+        service: service_config,
         ..ServerConfig::default()
     };
     if let Some(fn_rpc_url) = fn_rpc_url {

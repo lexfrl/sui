@@ -375,7 +375,7 @@ impl ServerBuilder {
         let mut builder = ServerBuilder::new(state);
 
         let name_service_config = config.service.name_service.clone();
-        let dot_move_config = config.service.dot_move.clone();
+        let dot_move_config = config.service.move_registry.clone();
         let zklogin_config = config.service.zklogin.clone();
         let reader = PgManager::reader_with_config(
             config.connection.db_url.clone(),

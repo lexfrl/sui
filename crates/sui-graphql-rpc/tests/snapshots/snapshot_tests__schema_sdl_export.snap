@@ -1260,9 +1260,9 @@ enum Feature {
 	"""
 	SYSTEM_STATE
 	"""
-	DotMove Service
+	Named packages service (utilizing dotmove package registry).
 	"""
-	DOT_MOVE_SERVICE
+	MOVE_REGISTRY
 }
 
 

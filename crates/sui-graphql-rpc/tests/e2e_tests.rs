@@ -14,6 +14,8 @@ mod tests {
     use sui_graphql_rpc::client::simple_client::GraphqlQueryVariable;
     use sui_graphql_rpc::client::ClientError;
     use sui_graphql_rpc::config::ConnectionConfig;
+    use sui_graphql_rpc::config::ServiceConfig;
+    use sui_graphql_rpc::test_infra::cluster::start_cluster;
     use sui_graphql_rpc::test_infra::cluster::DEFAULT_INTERNAL_DATA_SOURCE_PORT;
     use sui_types::digests::ChainIdentifier;
     use sui_types::gas_coin::GAS;
@@ -35,9 +37,7 @@ mod tests {
 
         let connection_config = ConnectionConfig::ci_integration_test_cfg();
 
-        let cluster =
-            sui_graphql_rpc::test_infra::cluster::start_cluster(connection_config, None, None)
-                .await;
+        let cluster = start_cluster(connection_config, None, ServiceConfig::test_defaults()).await;
 
         cluster
             .wait_for_checkpoint_catchup(0, Duration::from_secs(10))
@@ -335,9 +335,7 @@ mod tests {
 
         let connection_config = ConnectionConfig::ci_integration_test_cfg();
 
-        let cluster =
-            sui_graphql_rpc::test_infra::cluster::start_cluster(connection_config, None, None)
-                .await;
+        let cluster = start_cluster(connection_config, None, ServiceConfig::test_defaults()).await;
 
         let addresses = cluster
             .network
@@ -452,9 +450,7 @@ mod tests {
             .init();
 
         let connection_config = ConnectionConfig::ci_integration_test_cfg();
-        let cluster =
-            sui_graphql_rpc::test_infra::cluster::start_cluster(connection_config, None, None)
-                .await;
+        let cluster = start_cluster(connection_config, None, ServiceConfig::test_defaults()).await;
 
         let test_cluster = cluster.network.validator_fullnode_handle;
         test_cluster.wait_for_epoch_all_nodes(1).await;
@@ -567,9 +563,7 @@ mod tests {
 
         let connection_config = ConnectionConfig::ci_integration_test_cfg();
 
-        let cluster =
-            sui_graphql_rpc::test_infra::cluster::start_cluster(connection_config, None, None)
-                .await;
+        let cluster = start_cluster(connection_config, None, ServiceConfig::test_defaults()).await;
 
         let addresses = cluster
             .network
@@ -667,9 +661,7 @@ mod tests {
 
         let connection_config = ConnectionConfig::ci_integration_test_cfg();
 
-        let cluster =
-            sui_graphql_rpc::test_infra::cluster::start_cluster(connection_config, None, None)
-                .await;
+        let cluster = start_cluster(connection_config, None, ServiceConfig::test_defaults()).await;
 
         let addresses = cluster
             .network
@@ -744,9 +736,7 @@ mod tests {
 
         let connection_config = ConnectionConfig::ci_integration_test_cfg();
 
-        let cluster =
-            sui_graphql_rpc::test_infra::cluster::start_cluster(connection_config, None, None)
-                .await;
+        let cluster = start_cluster(connection_config, None, ServiceConfig::test_defaults()).await;
 
         let addresses = cluster
             .network
@@ -839,9 +829,7 @@ mod tests {
 
         let connection_config = ConnectionConfig::ci_integration_test_cfg();
 
-        let cluster =
-            sui_graphql_rpc::test_infra::cluster::start_cluster(connection_config, None, None)
-                .await;
+        let cluster = start_cluster(connection_config, None, ServiceConfig::test_defaults()).await;
 
         cluster
             .network

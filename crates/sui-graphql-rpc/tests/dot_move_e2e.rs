@@ -7,10 +7,13 @@ mod tests {
 
     use sui_graphql_rpc::{
         config::{ConnectionConfig, ServiceConfig},
-        test_infra::cluster::{start_graphql_server_with_fn_rpc, wait_for_graphql_server},
+        test_infra::cluster::{
+            start_graphql_server_with_fn_rpc, start_network_cluster, wait_for_graphql_server,
+            NetworkCluster,
+        },
     };
     use sui_graphql_rpc_client::simple_client::SimpleClient;
-    use sui_json_rpc_types::{ObjectChange, SuiTransactionBlockResponse};
+    use sui_json_rpc_types::ObjectChange;
     use sui_move_build::BuildConfig;
     use sui_types::{
         base_types::{ObjectID, SequenceNumber},
@@ -18,7 +21,7 @@ mod tests {
         move_package::UpgradePolicy,
         object::Owner,
         programmable_transaction_builder::ProgrammableTransactionBuilder,
-        transaction::{CallArg, ObjectArg, TransactionData},
+        transaction::{CallArg, ObjectArg},
         Identifier, SUI_FRAMEWORK_PACKAGE_ID,
     };
     use tokio::time::sleep;
@@ -33,11 +36,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_dot_move_e2e() {
-        let network_cluster = sui_graphql_rpc::test_infra::cluster::start_network_cluster(
-            ConnectionConfig::ci_integration_test_cfg(),
-            None,
-        )
-        .await;
+        let network_cluster =
+            start_network_cluster(ConnectionConfig::ci_integration_test_cfg(), None).await;
 
         let external_network_chain_id = network_cluster
             .validator_fullnode_handle
@@ -48,9 +48,9 @@ mod tests {
             .await
             .unwrap();
 
-        println!("External chain id: {:?}", external_network_chain_id);
+        eprintln!("External chain id: {:?}", external_network_chain_id);
 
-        // // publish the dot move package in the internal resolution cluster.
+        // publish the dot move package in the internal resolution cluster.
         let (pkg_id, registry_id) = publish_dot_move_package(&network_cluster).await;
 
         let (v1, v2, v3) = publish_demo_pkg(&network_cluster).await;
@@ -62,7 +62,7 @@ mod tests {
             &network_cluster,
             pkg_id,
             registry_id,
-            v1.clone(),
+            v1,
             name.clone(),
             None,
         )
@@ -115,35 +115,50 @@ mod tests {
             .await
             .unwrap();
 
-        test_results(internal_resolution, &v1, &v2, &v3);
+        test_results(internal_resolution, &v1, &v2, &v3, "internal resolution");
 
-        println!("Tests have finished successfully now!");
+        eprintln!("Tests have finished successfully now!");
     }
 
-    fn test_results(query_result: serde_json::Value, v1: &ObjectID, v2: &ObjectID, v3: &ObjectID) {
+    fn test_results(
+        query_result: serde_json::Value,
+        v1: &ObjectID,
+        v2: &ObjectID,
+        v3: &ObjectID,
+        // an indicator to help identify the test case that failed using this.
+        indicator: &str,
+    ) {
+        eprintln!("Testing results for: {}", indicator);
         assert_eq!(
             query_result["data"]["valid_latest"]["address"]
                 .as_str()
                 .unwrap(),
-            v3.to_string()
+            v3.to_string(),
+            "The latest version should have been v3",
         );
 
         assert_eq!(
             query_result["data"]["v1"]["address"].as_str().unwrap(),
-            v1.to_string()
+            v1.to_string(),
+            "V1 response did not correspond to the expected value",
         );
 
         assert_eq!(
             query_result["data"]["v2"]["address"].as_str().unwrap(),
-            v2.to_string()
+            v2.to_string(),
+            "V2 response did not correspond to the expected value",
         );
 
         assert_eq!(
             query_result["data"]["v3"]["address"].as_str().unwrap(),
-            v3.to_string()
+            v3.to_string(),
+            "V3 response did not correspond to the expected value",
         );
 
-        assert!(query_result["data"]["v4"].is_null());
+        assert!(
+            query_result["data"]["v4"].is_null(),
+            "V4 should not have been found"
+        );
     }
 
     async fn init_dot_move_gql(
@@ -157,8 +172,7 @@ mod tests {
             prom_port,
         );
 
-        let _gql_handle =
-            start_graphql_server_with_fn_rpc(cfg.clone(), None, None, Some(config)).await;
+        let _gql_handle = start_graphql_server_with_fn_rpc(cfg.clone(), None, None, config).await;
 
         let server_url = format!("http://{}:{}/", cfg.host(), cfg.port());
 
@@ -170,7 +184,7 @@ mod tests {
     }
 
     async fn register_pkg(
-        cluster: &sui_graphql_rpc::test_infra::cluster::NetworkCluster,
+        cluster: &NetworkCluster,
         dot_move_package_id: ObjectID,
         registry_id: (ObjectID, SequenceNumber),
         package_id: ObjectID,
@@ -205,15 +219,16 @@ mod tests {
             .move_call(dot_move_package_id, "dotmove", function, args)
             .build();
 
-        execute_tx(cluster, tx).await;
+        cluster
+            .validator_fullnode_handle
+            .sign_and_execute_transaction(&tx)
+            .await;
 
-        println!("Added record successfully: {:?}", (name, chain_id));
+        eprintln!("Added record successfully: {:?}", (name, chain_id));
     }
 
     // Publishes the Demo PKG, upgrades it twice and returns v1, v2 and v3 package ids.
-    async fn publish_demo_pkg(
-        cluster: &sui_graphql_rpc::test_infra::cluster::NetworkCluster,
-    ) -> (ObjectID, ObjectID, ObjectID) {
+    async fn publish_demo_pkg(cluster: &NetworkCluster) -> (ObjectID, ObjectID, ObjectID) {
         let tx = cluster
             .validator_fullnode_handle
             .test_transaction_builder()
@@ -221,7 +236,10 @@ mod tests {
             .publish(PathBuf::from(DEMO_PKG))
             .build();
 
-        let executed = execute_tx(cluster, tx).await;
+        let executed = cluster
+            .validator_fullnode_handle
+            .sign_and_execute_transaction(&tx)
+            .await;
         let object_changes = executed.object_changes.unwrap();
 
         let v1 = object_changes
@@ -266,7 +284,7 @@ mod tests {
     }
 
     async fn upgrade_pkg(
-        cluster: &sui_graphql_rpc::test_infra::cluster::NetworkCluster,
+        cluster: &NetworkCluster,
         package_path: &str,
         upgrade_cap: UpgradeCap,
         current_package_object_id: ObjectID,
@@ -318,7 +336,10 @@ mod tests {
             .programmable(builder.finish())
             .build();
 
-        let upgraded = execute_tx(cluster, tx).await;
+        let upgraded = cluster
+            .validator_fullnode_handle
+            .sign_and_execute_transaction(&tx)
+            .await;
 
         let object_changes = upgraded.object_changes.unwrap();
 
@@ -361,7 +382,7 @@ mod tests {
     }
 
     async fn publish_dot_move_package(
-        cluster: &sui_graphql_rpc::test_infra::cluster::NetworkCluster,
+        cluster: &NetworkCluster,
     ) -> (ObjectID, (ObjectID, SequenceNumber)) {
         let package_path = PathBuf::from(DOT_MOVE_PKG);
         let tx = cluster
@@ -420,22 +441,5 @@ mod tests {
 
     fn name_query(name: &str) -> String {
         format!(r#"packageByName(name: "{}") {{ address, version }}"#, name)
-    }
-
-    async fn execute_tx(
-        cluster: &sui_graphql_rpc::test_infra::cluster::NetworkCluster,
-        tx: TransactionData,
-    ) -> SuiTransactionBlockResponse {
-        let sig = cluster
-            .validator_fullnode_handle
-            .wallet
-            .sign_transaction(&tx);
-
-        let executed = cluster
-            .validator_fullnode_handle
-            .execute_transaction(sig)
-            .await;
-
-        executed
     }
 }

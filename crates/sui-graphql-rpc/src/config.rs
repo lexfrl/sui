@@ -3,7 +3,7 @@
 
 use crate::types::big_int::BigInt;
 use crate::types::dot_move::config::ResolutionType;
-use crate::{functional_group::FunctionalGroup, types::dot_move::config::DotMoveConfig};
+use crate::{functional_group::FunctionalGroup, types::dot_move::config::MoveRegistryConfig};
 use async_graphql::*;
 use fastcrypto_zkp::bn254::zk_login_api::ZkLoginEnv;
 use serde::{Deserialize, Serialize};
@@ -103,7 +103,7 @@ pub struct ServiceConfig {
     pub(crate) zklogin: ZkLoginConfig,
 
     #[serde(default)]
-    pub(crate) dot_move: DotMoveConfig,
+    pub(crate) move_registry: MoveRegistryConfig,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
@@ -432,13 +432,13 @@ impl ServiceConfig {
         page_limit: Option<u16>,
     ) -> Self {
         Self {
-            dot_move: DotMoveConfig {
+            move_registry: MoveRegistryConfig {
                 resolution_type: if external {
                     ResolutionType::External
                 } else {
                     ResolutionType::Internal
                 },
-                mainnet_api_url: endpoint,
+                external_api_url: endpoint,
                 package_address: pkg_address.unwrap_or_default(),
                 registry_id: object_id.unwrap_or(ObjectID::random()),
                 page_limit: page_limit.unwrap_or(50),

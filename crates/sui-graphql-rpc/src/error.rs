@@ -6,7 +6,7 @@ use async_graphql_axum::GraphQLResponse;
 use sui_indexer::errors::IndexerError;
 use sui_json_rpc::name_service::NameServiceError;
 
-use crate::types::dot_move::config::DotMoveServiceError;
+use crate::types::dot_move::error::MoveRegistryError;
 
 /// Error codes for the `extensions.code` field of a GraphQL error that originates from outside
 /// GraphQL.
@@ -79,14 +79,14 @@ pub enum Error {
     #[error("Internal error occurred while processing request: {0}")]
     Internal(String),
     #[error(transparent)]
-    DotMove(#[from] DotMoveServiceError),
+    MoveNameRegistry(#[from] MoveRegistryError),
 }
 
 impl ErrorExtensions for Error {
     fn extend(&self) -> async_graphql::Error {
         async_graphql::Error::new(format!("{}", self)).extend_with(|_err, e| match self {
             Error::NameService(_)
-            | Error::DotMove(_)
+            | Error::MoveNameRegistry(_)
             | Error::CursorNoFirstLast
             | Error::PageTooLarge(_, _)
             | Error::ProtocolVersionUnsupported(_, _)

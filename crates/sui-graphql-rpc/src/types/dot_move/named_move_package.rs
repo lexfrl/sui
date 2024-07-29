@@ -10,17 +10,22 @@ use crate::{
     types::{move_object::MoveObject, move_package::MovePackage, object::Object},
 };
 
-use super::config::{AppInfo, AppRecord, DotMoveConfig, VersionedName};
+use super::{
+    config::MoveRegistryConfig,
+    on_chain::{AppInfo, AppRecord, VersionedName},
+};
 
 pub(crate) struct NamedMovePackage;
 
 impl NamedMovePackage {
+    /// Queries a package by name (and version, encoded in the name).
+    /// Name's format should be `{application}@{organization}/v{versiion}`.
     pub(crate) async fn query(
         ctx: &Context<'_>,
         name: &str,
         checkpoint_viewed_at: u64,
     ) -> Result<Option<MovePackage>, Error> {
-        let config: &DotMoveConfig = ctx.data_unchecked();
+        let config: &MoveRegistryConfig = ctx.data_unchecked();
         let versioned = VersionedName::from_str(name)?;
 
         Self::query_internal(ctx, config, versioned, checkpoint_viewed_at).await
@@ -28,16 +33,16 @@ impl NamedMovePackage {
 
     async fn query_internal(
         ctx: &Context<'_>,
-        config: &DotMoveConfig,
+        config: &MoveRegistryConfig,
         versioned: VersionedName,
         checkpoint_viewed_at: u64,
     ) -> Result<Option<MovePackage>, Error> {
-        let Some(df) = MoveObject::query(
-            ctx,
-            versioned.name.to_dynamic_field_id(config).into(),
-            Object::latest_at(checkpoint_viewed_at),
-        )
-        .await?
+        let df_id = versioned.name.to_dynamic_field_id(config).map_err(|e| {
+            Error::Internal(format!("Failed to convert name to dynamic field id: {}", e))
+        })?;
+
+        let Some(df) =
+            MoveObject::query(ctx, df_id.into(), Object::latest_at(checkpoint_viewed_at)).await?
         else {
             return Ok(None);
         };
