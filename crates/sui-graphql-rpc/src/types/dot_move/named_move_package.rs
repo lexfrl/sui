@@ -6,14 +6,12 @@ use std::str::FromStr;
 use async_graphql::Context;
 
 use crate::{
+    config::MoveRegistryConfig,
     error::Error,
     types::{move_object::MoveObject, move_package::MovePackage, object::Object},
 };
 
-use super::{
-    config::MoveRegistryConfig,
-    on_chain::{AppInfo, AppRecord, VersionedName},
-};
+use super::on_chain::{AppInfo, AppRecord, VersionedName};
 
 pub(crate) struct NamedMovePackage;
 
@@ -70,9 +68,11 @@ impl NamedMovePackage {
         MovePackage::query(
             ctx,
             package_address.into(),
-            version.map_or(MovePackage::latest_at(checkpoint_viewed_at), |v| {
+            if let Some(v) = version {
                 MovePackage::by_version(v, checkpoint_viewed_at)
-            }),
+            } else {
+                MovePackage::latest_at(checkpoint_viewed_at)
+            },
         )
         .await
     }

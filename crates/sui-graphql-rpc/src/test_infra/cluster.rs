@@ -274,7 +274,7 @@ pub async fn wait_for_graphql_server(client: &SimpleClient) {
 
 /// Ping the GraphQL server until its background task has updated the checkpoint watermark to the
 /// desired checkpoint.
-async fn wait_for_graphql_checkpoint_catchup(
+pub async fn wait_for_graphql_checkpoint_catchup(
     client: &SimpleClient,
     checkpoint: u64,
     base_timeout: Duration,

@@ -16,12 +16,12 @@ use sui_types::{
     object::MoveObject as NativeMoveObject,
 };
 
-use crate::types::base64::Base64;
-
-use super::{
+use crate::{
     config::{MoveRegistryConfig, MOVE_REGISTRY_MODULE, MOVE_REGISTRY_TYPE},
-    error::MoveRegistryError,
+    types::base64::Base64,
 };
+
+use super::error::MoveRegistryError;
 
 const MAX_LABEL_LENGTH: usize = 63;
 

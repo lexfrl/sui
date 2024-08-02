@@ -8,8 +8,8 @@ mod tests {
     use sui_graphql_rpc::{
         config::{ConnectionConfig, ServiceConfig},
         test_infra::cluster::{
-            start_graphql_server_with_fn_rpc, start_network_cluster, wait_for_graphql_server,
-            NetworkCluster,
+            start_graphql_server_with_fn_rpc, start_network_cluster,
+            wait_for_graphql_checkpoint_catchup, wait_for_graphql_server, NetworkCluster,
         },
     };
     use sui_graphql_rpc_client::simple_client::SimpleClient;
@@ -24,8 +24,6 @@ mod tests {
         transaction::{CallArg, ObjectArg},
         Identifier, SUI_FRAMEWORK_PACKAGE_ID,
     };
-    use tokio::time::sleep;
-
     const DOT_MOVE_PKG: &str = "tests/dot_move/dot_move/";
     const DEMO_PKG: &str = "tests/dot_move/demo/";
     const DEMO_PKG_V2: &str = "tests/dot_move/demo_v2/";
@@ -95,8 +93,23 @@ mod tests {
         )
         .await;
 
-        // Wait for the transactions to be committed and indexed
-        sleep(Duration::from_secs(5)).await;
+        // Await for the internal cluster to catch up with the latest checkpoint.
+        // That way we're certain that the data is available for querying (committed & indexed).
+        let latest_checkpoint = network_cluster
+            .validator_fullnode_handle
+            .fullnode_handle
+            .sui_node
+            .inner()
+            .state()
+            .get_latest_checkpoint_sequence_number()
+            .expect("To have a checkpoint");
+
+        wait_for_graphql_checkpoint_catchup(
+            &internal_client,
+            latest_checkpoint,
+            Duration::from_millis(500),
+        )
+        .await;
 
         // We craft a big query, which we'll use to test both the internal and the external resolution.
         // Same query is used across both nodes, since we're testing on top of the same data, just with a different
