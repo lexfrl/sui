@@ -835,6 +835,7 @@ impl CheckpointBuilder {
                 .epoch_store
                 .last_built_checkpoint_builder_summary()
                 .expect("epoch should not have ended");
+            debug!(last_built_summary = ?summary);
             let mut last_height = summary.clone().and_then(|s| s.checkpoint_height);
             let mut last_timestamp = summary.map(|s| s.summary.timestamp_ms);
 
@@ -912,6 +913,7 @@ impl CheckpointBuilder {
     #[instrument(level = "debug", skip_all, fields(last_height = pendings.last().unwrap().details().checkpoint_height))]
     async fn make_checkpoint(&self, pendings: Vec<PendingCheckpointV2>) -> anyhow::Result<()> {
         let last_details = pendings.last().unwrap().details().clone();
+        debug!(?last_details, num = ?pendings.len());
 
         // Keeps track of the effects that are already included in the current checkpoint.
         // This is used when there are multiple pending checkpoints to create a single checkpoint
@@ -986,7 +988,7 @@ impl CheckpointBuilder {
 
                 // No other dependencies of this consensus commit prologue that haven't been included
                 // in any previous checkpoint.
-                assert_eq!(unsorted_ccp.len(), 1);
+                assert_eq!(unsorted_ccp.len(), 1, "{:?}", unsorted_ccp);
                 assert_eq!(unsorted_ccp[0].transaction_digest(), ccp_digest);
             }
             consensus_commit_prologue
@@ -1472,6 +1474,7 @@ impl CheckpointBuilder {
         let _scope = monitored_scope("CheckpointBuilder::complete_checkpoint_effects");
         let mut results = vec![];
         let mut seen = HashSet::new();
+        debug!("HAY");
         loop {
             let mut pending = HashSet::new();
 
@@ -1480,19 +1483,23 @@ impl CheckpointBuilder {
                 .builder_included_transactions_in_checkpoint(
                     roots.iter().map(|e| e.transaction_digest()),
                 )?;
+            debug!("HAY");
 
             for (effect, tx_included) in roots.into_iter().zip(transactions_included.into_iter()) {
                 let digest = effect.transaction_digest();
+                debug!(?digest, "HAY");
                 // Unnecessary to read effects of a dependency if the effect is already processed.
                 seen.insert(*digest);
 
                 // Skip roots that are already included in the checkpoint.
                 if existing_tx_digests_in_checkpoint.contains(effect.transaction_digest()) {
+                    debug!("HAY");
                     continue;
                 }
 
                 // Skip roots already included in checkpoints or roots from previous epochs
                 if tx_included || effect.executed_epoch() < self.epoch_store.epoch() {
+                    debug!(?tx_included, executed_epoch = ?effect.executed_epoch(), "HAY");
                     continue;
                 }
 
@@ -1508,15 +1515,19 @@ impl CheckpointBuilder {
                     // epoch store for the given digest indicates that the transaction
                     // was locally executed in the current epoch
                     if !effects_signature_exists {
+                        debug!("HAY");
                         continue;
                     }
                     if seen.insert(*dependency) {
+                        debug!("HAY");
                         pending.insert(*dependency);
                     }
                 }
+                debug!("HAY");
                 results.push(effect);
             }
             if pending.is_empty() {
+                debug!("HAY");
                 break;
             }
             let pending = pending.into_iter().collect::<Vec<_>>();
@@ -1535,6 +1546,7 @@ impl CheckpointBuilder {
             roots = effects;
         }
 
+        debug!("HAY");
         existing_tx_digests_in_checkpoint.extend(results.iter().map(|e| e.transaction_digest()));
         Ok(results)
     }

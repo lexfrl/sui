@@ -4127,6 +4127,14 @@ pub(crate) struct ConsensusOutputQuarantine {
 impl ConsensusOutputQuarantine {
     fn push(&mut self, output: ConsensusCommitOutput) {
         self.insert_shared_object_next_versions(&output);
+        debug!(
+            "new pending checkpoints: {:?}",
+            output
+                .pending_checkpoints
+                .iter()
+                .map(|p| p.details())
+                .collect::<Vec<_>>()
+        );
         self.output_queue.push_back(output);
     }
 
@@ -4151,6 +4159,7 @@ impl ConsensusOutputQuarantine {
             self.next_checkpoint_sequence_to_commit = Some(sequence_number);
         }
         self.commit_finalized_data(epoch_store)
+        //self.commit_finalized_data_impl(sequence_number, epoch_store, batch)
     }
 
     fn commit_finalized_data(&mut self, epoch_store: &AuthorityPerEpochStore) -> SuiResult {
@@ -4229,7 +4238,10 @@ impl ConsensusOutputQuarantine {
 
         batch.insert_batch(
             &tables.builder_digest_to_checkpoint,
-            contents.iter().map(|tx| (tx.transaction, seq)),
+            contents.iter().map(|tx| {
+                debug!(digest = ?tx.transaction, "Inserting transaction into builder_digest_to_checkpoint");
+                (tx.transaction, seq)
+            }),
         )?;
 
         let height = builder_summary
@@ -4363,6 +4375,7 @@ impl ConsensusOutputQuarantine {
         &self,
         last: Option<CheckpointHeight>,
     ) -> Vec<(CheckpointHeight, PendingCheckpointV2)> {
+        debug!(?last, "get_pending_checkpoints");
         let mut checkpoints = Vec::new();
         for output in &self.output_queue {
             checkpoints.extend(
@@ -4464,6 +4477,7 @@ impl ConsensusOutputQuarantine {
     }
 
     fn last_built_summary(&self) -> Option<&BuilderCheckpointSummary> {
+        debug!(summary_heights = ?self.builder_checkpoint_summary.iter().map(|(c, s)| (c, s.0.checkpoint_height)).collect::<Vec<_>>());
         self.builder_checkpoint_summary
             .values()
             .last()

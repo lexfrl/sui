@@ -1446,6 +1446,11 @@ impl AuthorityStore {
     ) -> Result<(), TypedStoreError> {
         let mut write_batch = self.perpetual_tables.transactions.batch();
         for tx in transactions {
+            debug!(
+                "inserting {:?} {:?}",
+                tx.transaction.digest(),
+                tx.effects.digest()
+            );
             write_batch
                 .insert_batch(
                     &self.perpetual_tables.transactions,
