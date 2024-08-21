@@ -1033,6 +1033,7 @@ impl DependencyGraph {
                 // the way that external graphs are constructed, edges between the (root) package of
                 // the outer graph and dependencies in the sub-graph are already present in the
                 // sub-graph
+                // TODO(rvantonder): this behavior needs to change to support "_" as a multi-dependency specifier
                 let d = sub_graph
                     .package_graph
                     .edge_weight(self.root_package_id, dep_pkg_id)
