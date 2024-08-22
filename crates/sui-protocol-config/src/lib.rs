@@ -164,12 +164,12 @@ const MAX_PROTOCOL_VERSION: u64 = 55;
 // Version 53: Add feature flag to decide whether to attempt to finalize bridge committee
 //             Enable consensus commit prologue V3 on testnet.
 //             Turn on shared object congestion control in testnet.
-//             Switch to certified vote scoring in consensus
 //             Update stdlib natives costs
 // Version 54: Enable random beacon on mainnet.
 //             Enable soft bundle on mainnet.
 // Version 55: Enable enums on mainnet.
 //             Rethrow serialization type layout errors instead of converting them.
+//             Switch to distributed vote scoring in consensus in devnet
 
 #[derive(Copy, Clone, Debug, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProtocolVersion(u64);
@@ -513,9 +513,9 @@ struct FeatureFlags {
     #[serde(skip_serializing_if = "is_false")]
     rethrow_serialization_type_layout_errors: bool,
 
-    // Use certified vote leader scoring strategy in consensus.
+    // Use distributed vote leader scoring strategy in consensus.
     #[serde(skip_serializing_if = "is_false")]
-    consensus_certified_vote_scoring_strategy: bool,
+    consensus_distributed_vote_scoring_strategy: bool,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -1551,8 +1551,9 @@ impl ProtocolConfig {
         self.feature_flags.rethrow_serialization_type_layout_errors
     }
 
-    pub fn consensus_certified_vote_scoring_strategy(&self) -> bool {
-        self.feature_flags.consensus_certified_vote_scoring_strategy
+    pub fn consensus_distributed_vote_scoring_strategy(&self) -> bool {
+        self.feature_flags
+            .consensus_distributed_vote_scoring_strategy
     }
 }
 
@@ -2630,9 +2631,6 @@ impl ProtocolConfig {
                         cfg.max_accumulated_txn_cost_per_object_in_mysticeti_commit = Some(10);
                         cfg.feature_flags.per_object_congestion_control_mode =
                             PerObjectCongestionControlMode::TotalTxCount;
-
-                        // Enable certified vote scoring
-                        cfg.feature_flags.consensus_certified_vote_scoring_strategy = true;
                     }
 
                     // Adjust stdlib gas costs
@@ -2694,6 +2692,12 @@ impl ProtocolConfig {
                     cfg.consensus_max_num_transactions_in_block = Some(512);
 
                     cfg.feature_flags.rethrow_serialization_type_layout_errors = true;
+
+                    if chain != Chain::Mainnet && chain != Chain::Testnet {
+                        // Enable distributed vote scoring
+                        cfg.feature_flags
+                            .consensus_distributed_vote_scoring_strategy = true;
+                    }
                 }
                 // Use this template when making changes:
                 //
@@ -2857,8 +2861,9 @@ impl ProtocolConfig {
         self.feature_flags.passkey_auth = val
     }
 
-    pub fn set_consensus_certified_vote_scoring_strategy_for_testing(&mut self, val: bool) {
-        self.feature_flags.consensus_certified_vote_scoring_strategy = val;
+    pub fn set_consensus_distributed_vote_scoring_strategy_for_testing(&mut self, val: bool) {
+        self.feature_flags
+            .consensus_distributed_vote_scoring_strategy = val;
     }
 }
 
