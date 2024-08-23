@@ -12,6 +12,7 @@ use arc_swap::ArcSwap;
 use fastcrypto_zkp::bn254::zk_login::JwkId;
 use fastcrypto_zkp::bn254::zk_login::OIDCProvider;
 use futures::TryFutureExt;
+use once_cell::sync::OnceCell;
 use prometheus::Registry;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
@@ -2088,7 +2089,7 @@ async fn proxy_exe_middleware(
     request: Request,
     next: Next,
 ) -> Response {
-    if IN_GKE_ASIA.is_none() {
+    if IN_GKE_ASIA.get().is_none() {
         let client = reqwest::Client::new();
         let in_gke_asia = match client
             .get("http://metadata.google.internal/computeMetadata/v1/instance/zone")
@@ -2104,10 +2105,11 @@ async fn proxy_exe_middleware(
             Err(_) => false,
         };
 
-        IN_GKE_ASIA.set(in_gke_asia);
+        IN_GKE_ASIA.set(in_gke_asia).ok();
     }
 
     if !IN_GKE_ASIA.get().unwrap() {
+        info!("not in GKE asia, running request locally");
         // not in asia, run request locally
         return next.run(request).await;
     }
@@ -2147,6 +2149,7 @@ async fn proxy_exe_middleware(
     };
 
     if let Some("sui_executeTransactionBlock") = body.get("method").and_then(|m| m.as_str()) {
+        info!("proxying request to europe");
         // proxy to remote
         let response = client
             .post("http://euw2-testnet-benchmark-service.benchmark-rpc-testnet.svc.clusterset.local:9000")
