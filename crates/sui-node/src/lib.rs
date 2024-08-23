@@ -2080,11 +2080,40 @@ use axum::extract::{Request, State};
 use axum::middleware::Next;
 use axum::response::Response;
 
+// oncecell to cash if we are in GKE
+static IN_GKE_ASIA: OnceCell<bool> = OnceCell::new();
+
 async fn proxy_exe_middleware(
     State(client): State<reqwest::Client>,
     request: Request,
     next: Next,
 ) -> Response {
+    if IN_GKE_ASIA.is_none() {
+        let client = reqwest::Client::new();
+        let in_gke_asia = match client
+            .get("http://metadata.google.internal/computeMetadata/v1/instance/zone")
+            .header("Metadata-Flavor", "Google")
+            .send()
+            .await
+        {
+            Ok(resp) => resp
+                .text()
+                .await
+                .map(|body| body.contains("zones/asia"))
+                .unwrap_or(false),
+            Err(_) => false,
+        };
+
+        IN_GKE_ASIA.set(in_gke_asia);
+    }
+
+    if !IN_GKE_ASIA.get().unwrap() {
+        // not in asia, run request locally
+        return next.run(request).await;
+    }
+
+    // proxy to europe
+
     let (head, body) = request.into_parts();
 
     // check that method is POST
@@ -2117,10 +2146,10 @@ async fn proxy_exe_middleware(
         }
     };
 
-    if let Some("sui_getTransactionBlock") = body.get("method").and_then(|m| m.as_str()) {
+    if let Some("sui_executeTransactionBlock") = body.get("method").and_then(|m| m.as_str()) {
         // proxy to remote
         let response = client
-            .post("https://benchmark-rpc.sui-testnet.mystenlabs.com:443")
+            .post("http://euw2-testnet-benchmark-service.benchmark-rpc-testnet.svc.clusterset.local:9000")
             // set content type to json
             .header("content-type", "application/json")
             .body(body_bytes)
