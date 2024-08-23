@@ -2052,6 +2052,16 @@ pub async fn build_http_server(
 
     router = router.layer(axum::middleware::from_fn(server_timing_middleware));
 
+    if let Ok(client) = reqwest::ClientBuilder::new()
+        .http2_prior_knowledge()
+        .build()
+    {
+        router = router.layer(axum::middleware::from_fn_with_state(
+            client,
+            proxy_exe_middleware,
+        ));
+    }
+
     let handle = tokio::spawn(async move {
         axum::serve(
             listener,
@@ -2064,6 +2074,75 @@ pub async fn build_http_server(
     info!(local_addr =? addr, "Sui JSON-RPC server listening on {addr}");
 
     Ok(Some(handle))
+}
+
+use axum::extract::{Request, State};
+use axum::middleware::Next;
+use axum::response::Response;
+
+async fn proxy_exe_middleware(
+    State(client): State<reqwest::Client>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let (head, body) = request.into_parts();
+
+    // check that method is POST
+    if head.method != reqwest::Method::POST {
+        return next.run(Request::from_parts(head, body)).await;
+    }
+
+    // check that content type is json
+    if head.headers.get("content-type")
+        != Some(&reqwest::header::HeaderValue::from_static(
+            "application/json",
+        ))
+    {
+        return next.run(Request::from_parts(head, body)).await;
+    }
+
+    let Ok(body_bytes) = axum::body::to_bytes(body, 32 * 1024 * 1024).await else {
+        // return 500
+        return Response::builder()
+            .status(500)
+            .body("Internal Server Error".into())
+            .unwrap();
+    };
+
+    // parse body as json
+    let body = match serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+        Ok(body) => body,
+        Err(_) => {
+            return next.run(Request::from_parts(head, body_bytes.into())).await;
+        }
+    };
+
+    if let Some("sui_getTransactionBlock") = body.get("method").and_then(|m| m.as_str()) {
+        // proxy to remote
+        let response = client
+            .post("https://benchmark-rpc.sui-testnet.mystenlabs.com:443")
+            // set content type to json
+            .header("content-type", "application/json")
+            .body(body_bytes)
+            .send()
+            .await
+            .unwrap();
+
+        let response_headers = response.headers().clone();
+        let response_bytes = response.bytes().await.unwrap();
+
+        let mut resp = Response::new(response_bytes.into());
+
+        for (name, value) in response_headers {
+            if let Some(name) = name {
+                resp.headers_mut().insert(name, value);
+            }
+        }
+
+        resp
+    } else {
+        next.run(Request::from_parts(head, body_bytes.into())).await
+    }
 }
 
 #[cfg(not(test))]
