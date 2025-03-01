@@ -6,8 +6,9 @@ use anyhow::{bail, Result};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use std::ops::Range;
-use sui_field_count::FieldCount;
-use sui_pg_db::Connection;
+
+use crate::db::Connection;
+use crate::FieldCount;
 
 #[derive(Insertable, Selectable, Queryable, Debug, Clone, FieldCount)]
 #[diesel(table_name = cp_sequence_numbers)]
@@ -40,7 +41,7 @@ pub async fn epoch_interval(conn: &mut Connection<'_>, cps: Range<u64>) -> Resul
 
 /// Gets the tx and epoch mappings for the given checkpoint range.
 ///
-/// The values are expected to exist since the cp_mapping table must have enough information to
+/// The values are expected to exist since the cp_sequence_numbers table must have enough information to
 /// encompass the retention of other tables.
 pub(crate) async fn get_range(
     conn: &mut Connection<'_>,

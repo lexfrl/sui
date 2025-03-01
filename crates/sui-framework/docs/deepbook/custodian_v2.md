@@ -8,7 +8,6 @@ title: Module `deepbook::custodian_v2`
 -  [Struct `AccountCap`](#deepbook_custodian_v2_AccountCap)
 -  [Struct `Custodian`](#deepbook_custodian_v2_Custodian)
 -  [Constants](#@Constants_0)
--  [Function `mint_account_cap`](#deepbook_custodian_v2_mint_account_cap)
 -  [Function `create_child_account_cap`](#deepbook_custodian_v2_create_child_account_cap)
 -  [Function `delete_account_cap`](#deepbook_custodian_v2_delete_account_cap)
 -  [Function `account_owner`](#deepbook_custodian_v2_account_owner)
@@ -60,7 +59,7 @@ title: Module `deepbook::custodian_v2`
 
 
 
-<pre><code><b>public</b> <b>struct</b> AccountT <b>has</b> store
+<pre><code><b>public</b> <b>struct</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Account">Account</a>&lt;<b>phantom</b> T&gt; <b>has</b> store
 </code></pre>
 
 
@@ -90,7 +89,7 @@ title: Module `deepbook::custodian_v2`
 ## Struct `AccountCap`
 
 Capability granting permission to access an entry in <code><a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">Custodian</a>.account_balances</code>.
-Calling <code><a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_mint_account_cap">mint_account_cap</a></code> creates an "admin account cap" such that id == owner with
+Calling <code>mint_account_cap</code> creates an "admin account cap" such that id == owner with
 the permission to both access funds and create new <code><a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_AccountCap">AccountCap</a></code>s.
 Calling <code><a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_create_child_account_cap">create_child_account_cap</a></code> creates a "child account cap" such that id != owner
 that can access funds, but cannot create new <code><a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_AccountCap">AccountCap</a></code>s.
@@ -129,7 +128,7 @@ that can access funds, but cannot create new <code><a href="../deepbook/custodia
 
 
 
-<pre><code><b>public</b> <b>struct</b> CustodianT <b>has</b> key, store
+<pre><code><b>public</b> <b>struct</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">Custodian</a>&lt;<b>phantom</b> T&gt; <b>has</b> key, store
 </code></pre>
 
 
@@ -168,34 +167,6 @@ that can access funds, but cannot create new <code><a href="../deepbook/custodia
 </code></pre>
 
 
-
-<a name="deepbook_custodian_v2_mint_account_cap"></a>
-
-## Function `mint_account_cap`
-
-Create an admin <code><a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_AccountCap">AccountCap</a></code> that can be used across all DeepBook pools, and has
-the permission to create new <code><a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_AccountCap">AccountCap</a></code>s that can access the same source of funds
-
-
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_mint_account_cap">mint_account_cap</a>(ctx: &<b>mut</b> <a href="../sui/tx_context.md#sui_tx_context_TxContext">sui::tx_context::TxContext</a>): <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_AccountCap">deepbook::custodian_v2::AccountCap</a>
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b>(package) <b>fun</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_mint_account_cap">mint_account_cap</a>(ctx: &<b>mut</b> TxContext): <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_AccountCap">AccountCap</a> {
-    <b>let</b> id = object::new(ctx);
-    <b>let</b> owner = object::uid_to_address(&id);
-    <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_AccountCap">AccountCap</a> { id, owner }
-}
-</code></pre>
-
-
-
-</details>
 
 <a name="deepbook_custodian_v2_create_child_account_cap"></a>
 
@@ -285,7 +256,7 @@ Return the owner of an AccountCap
 
 
 
-<pre><code><b>public</b>(package) <b>fun</b> account_balanceAsset(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;Asset&gt;, owner: <b>address</b>): (u64, u64)
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_account_balance">account_balance</a>&lt;Asset&gt;(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;Asset&gt;, owner: <b>address</b>): (u64, u64)
 </code></pre>
 
 
@@ -319,7 +290,7 @@ Return the owner of an AccountCap
 
 
 
-<pre><code><b>public</b>(package) <b>fun</b> newT(ctx: &<b>mut</b> <a href="../sui/tx_context.md#sui_tx_context_TxContext">sui::tx_context::TxContext</a>): <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_new">new</a>&lt;T&gt;(ctx: &<b>mut</b> <a href="../sui/tx_context.md#sui_tx_context_TxContext">sui::tx_context::TxContext</a>): <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;
 </code></pre>
 
 
@@ -346,7 +317,7 @@ Return the owner of an AccountCap
 
 
 
-<pre><code><b>public</b>(package) <b>fun</b> withdraw_assetAsset(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;Asset&gt;, quantity: u64, account_cap: &<a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_AccountCap">deepbook::custodian_v2::AccountCap</a>, ctx: &<b>mut</b> <a href="../sui/tx_context.md#sui_tx_context_TxContext">sui::tx_context::TxContext</a>): <a href="../sui/coin.md#sui_coin_Coin">sui::coin::Coin</a>&lt;Asset&gt;
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_withdraw_asset">withdraw_asset</a>&lt;Asset&gt;(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;Asset&gt;, quantity: u64, account_cap: &<a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_AccountCap">deepbook::custodian_v2::AccountCap</a>, ctx: &<b>mut</b> <a href="../sui/tx_context.md#sui_tx_context_TxContext">sui::tx_context::TxContext</a>): <a href="../sui/coin.md#sui_coin_Coin">sui::coin::Coin</a>&lt;Asset&gt;
 </code></pre>
 
 
@@ -375,7 +346,7 @@ Return the owner of an AccountCap
 
 
 
-<pre><code><b>public</b>(package) <b>fun</b> increase_user_available_balanceT(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, owner: <b>address</b>, quantity: <a href="../sui/balance.md#sui_balance_Balance">sui::balance::Balance</a>&lt;T&gt;)
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_increase_user_available_balance">increase_user_available_balance</a>&lt;T&gt;(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, owner: <b>address</b>, quantity: <a href="../sui/balance.md#sui_balance_Balance">sui::balance::Balance</a>&lt;T&gt;)
 </code></pre>
 
 
@@ -404,7 +375,7 @@ Return the owner of an AccountCap
 
 
 
-<pre><code><b>public</b>(package) <b>fun</b> decrease_user_available_balanceT(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, account_cap: &<a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_AccountCap">deepbook::custodian_v2::AccountCap</a>, quantity: u64): <a href="../sui/balance.md#sui_balance_Balance">sui::balance::Balance</a>&lt;T&gt;
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_decrease_user_available_balance">decrease_user_available_balance</a>&lt;T&gt;(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, account_cap: &<a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_AccountCap">deepbook::custodian_v2::AccountCap</a>, quantity: u64): <a href="../sui/balance.md#sui_balance_Balance">sui::balance::Balance</a>&lt;T&gt;
 </code></pre>
 
 
@@ -433,7 +404,7 @@ Return the owner of an AccountCap
 
 
 
-<pre><code><b>public</b>(package) <b>fun</b> increase_user_locked_balanceT(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, account_cap: &<a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_AccountCap">deepbook::custodian_v2::AccountCap</a>, quantity: <a href="../sui/balance.md#sui_balance_Balance">sui::balance::Balance</a>&lt;T&gt;)
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_increase_user_locked_balance">increase_user_locked_balance</a>&lt;T&gt;(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, account_cap: &<a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_AccountCap">deepbook::custodian_v2::AccountCap</a>, quantity: <a href="../sui/balance.md#sui_balance_Balance">sui::balance::Balance</a>&lt;T&gt;)
 </code></pre>
 
 
@@ -462,7 +433,7 @@ Return the owner of an AccountCap
 
 
 
-<pre><code><b>public</b>(package) <b>fun</b> decrease_user_locked_balanceT(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, owner: <b>address</b>, quantity: u64): <a href="../sui/balance.md#sui_balance_Balance">sui::balance::Balance</a>&lt;T&gt;
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_decrease_user_locked_balance">decrease_user_locked_balance</a>&lt;T&gt;(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, owner: <b>address</b>, quantity: u64): <a href="../sui/balance.md#sui_balance_Balance">sui::balance::Balance</a>&lt;T&gt;
 </code></pre>
 
 
@@ -492,7 +463,7 @@ Return the owner of an AccountCap
 Move <code>quantity</code> from the unlocked balance of <code>user</code> to the locked balance of <code>user</code>
 
 
-<pre><code><b>public</b>(package) <b>fun</b> lock_balanceT(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, account_cap: &<a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_AccountCap">deepbook::custodian_v2::AccountCap</a>, quantity: u64)
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_lock_balance">lock_balance</a>&lt;T&gt;(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, account_cap: &<a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_AccountCap">deepbook::custodian_v2::AccountCap</a>, quantity: u64)
 </code></pre>
 
 
@@ -522,7 +493,7 @@ Move <code>quantity</code> from the unlocked balance of <code>user</code> to the
 Move <code>quantity</code> from the locked balance of <code>user</code> to the unlocked balance of <code>user</code>
 
 
-<pre><code><b>public</b>(package) <b>fun</b> unlock_balanceT(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, owner: <b>address</b>, quantity: u64)
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_unlock_balance">unlock_balance</a>&lt;T&gt;(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, owner: <b>address</b>, quantity: u64)
 </code></pre>
 
 
@@ -551,7 +522,7 @@ Move <code>quantity</code> from the locked balance of <code>user</code> to the u
 
 
 
-<pre><code><b>public</b>(package) <b>fun</b> account_available_balanceT(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, owner: <b>address</b>): u64
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_account_available_balance">account_available_balance</a>&lt;T&gt;(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, owner: <b>address</b>): u64
 </code></pre>
 
 
@@ -578,7 +549,7 @@ Move <code>quantity</code> from the locked balance of <code>user</code> to the u
 
 
 
-<pre><code><b>public</b>(package) <b>fun</b> account_locked_balanceT(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, owner: <b>address</b>): u64
+<pre><code><b>public</b>(package) <b>fun</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_account_locked_balance">account_locked_balance</a>&lt;T&gt;(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, owner: <b>address</b>): u64
 </code></pre>
 
 
@@ -605,7 +576,7 @@ Move <code>quantity</code> from the locked balance of <code>user</code> to the u
 
 
 
-<pre><code><b>fun</b> borrow_mut_account_balanceT(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, owner: <b>address</b>): &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Account">deepbook::custodian_v2::Account</a>&lt;T&gt;
+<pre><code><b>fun</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_borrow_mut_account_balance">borrow_mut_account_balance</a>&lt;T&gt;(<a href="../deepbook/custodian.md#deepbook_custodian">custodian</a>: &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Custodian">deepbook::custodian_v2::Custodian</a>&lt;T&gt;, owner: <b>address</b>): &<b>mut</b> <a href="../deepbook/custodian_v2.md#deepbook_custodian_v2_Account">deepbook::custodian_v2::Account</a>&lt;T&gt;
 </code></pre>
 
 

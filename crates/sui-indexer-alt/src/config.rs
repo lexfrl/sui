@@ -68,8 +68,8 @@ pub struct IngestionLayer {
 #[DefaultConfig]
 #[derive(Clone, Default, Debug)]
 pub struct SequentialLayer {
-    committer: Option<CommitterLayer>,
-    checkpoint_lag: Option<u64>,
+    pub committer: Option<CommitterLayer>,
+    pub checkpoint_lag: Option<u64>,
 
     #[serde(flatten)]
     pub extra: toml::Table,
@@ -78,8 +78,8 @@ pub struct SequentialLayer {
 #[DefaultConfig]
 #[derive(Clone, Default, Debug)]
 pub struct ConcurrentLayer {
-    committer: Option<CommitterLayer>,
-    pruner: Option<PrunerLayer>,
+    pub committer: Option<CommitterLayer>,
+    pub pruner: Option<PrunerLayer>,
 
     #[serde(flatten)]
     pub extra: toml::Table,
@@ -88,9 +88,9 @@ pub struct ConcurrentLayer {
 #[DefaultConfig]
 #[derive(Clone, Default, Debug)]
 pub struct CommitterLayer {
-    write_concurrency: Option<usize>,
-    collect_interval_ms: Option<u64>,
-    watermark_interval_ms: Option<u64>,
+    pub write_concurrency: Option<usize>,
+    pub collect_interval_ms: Option<u64>,
+    pub watermark_interval_ms: Option<u64>,
 
     #[serde(flatten)]
     pub extra: toml::Table,
@@ -103,6 +103,7 @@ pub struct PrunerLayer {
     pub delay_ms: Option<u64>,
     pub retention: Option<u64>,
     pub max_chunk_size: Option<u64>,
+    pub prune_concurrency: Option<u64>,
 
     #[serde(flatten)]
     pub extra: toml::Table,
@@ -160,6 +161,36 @@ impl IndexerConfig {
         example.pipeline = PipelineLayer::example();
 
         example
+    }
+
+    /// Generate a configuration suitable for testing. This is the same as the example
+    /// configuration, but with reduced concurrency and faster polling intervals so tests spend
+    /// less time waiting.
+    pub fn for_test() -> Self {
+        Self::example().merge(IndexerConfig {
+            ingestion: IngestionLayer {
+                retry_interval_ms: Some(10),
+                ingest_concurrency: Some(1),
+                ..Default::default()
+            },
+            committer: CommitterLayer {
+                collect_interval_ms: Some(50),
+                watermark_interval_ms: Some(50),
+                write_concurrency: Some(1),
+                ..Default::default()
+            },
+            consistency: PrunerLayer {
+                interval_ms: Some(50),
+                delay_ms: Some(0),
+                ..Default::default()
+            },
+            pruner: PrunerLayer {
+                interval_ms: Some(50),
+                delay_ms: Some(0),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
     }
 
     pub fn finish(mut self) -> IndexerConfig {
@@ -229,11 +260,13 @@ impl CommitterLayer {
 
 impl PrunerLayer {
     pub fn finish(self, base: PrunerConfig) -> PrunerConfig {
+        check_extra("pruner", self.extra);
         PrunerConfig {
             interval_ms: self.interval_ms.unwrap_or(base.interval_ms),
             delay_ms: self.delay_ms.unwrap_or(base.delay_ms),
             retention: self.retention.unwrap_or(base.retention),
             max_chunk_size: self.max_chunk_size.unwrap_or(base.max_chunk_size),
+            prune_concurrency: self.prune_concurrency.unwrap_or(base.prune_concurrency),
         }
     }
 }
@@ -354,6 +387,7 @@ impl Merge for PrunerLayer {
                 (None, None) => None,
             },
             max_chunk_size: other.max_chunk_size.or(self.max_chunk_size),
+            prune_concurrency: other.prune_concurrency.or(self.prune_concurrency),
             extra: Default::default(),
         }
     }
@@ -451,6 +485,7 @@ impl From<PrunerConfig> for PrunerLayer {
             delay_ms: Some(config.delay_ms),
             retention: Some(config.retention),
             max_chunk_size: Some(config.max_chunk_size),
+            prune_concurrency: Some(config.prune_concurrency),
             extra: Default::default(),
         }
     }
@@ -618,6 +653,7 @@ mod tests {
             delay_ms: Some(100),
             retention: Some(200),
             max_chunk_size: Some(300),
+            prune_concurrency: Some(1),
             extra: Default::default(),
         };
 
@@ -626,6 +662,7 @@ mod tests {
             delay_ms: None,
             retention: Some(500),
             max_chunk_size: Some(600),
+            prune_concurrency: Some(2),
             extra: Default::default(),
         };
 
@@ -639,6 +676,7 @@ mod tests {
                 delay_ms: Some(100),
                 retention: Some(500),
                 max_chunk_size: Some(600),
+                prune_concurrency: Some(2),
                 extra: _,
             },
         );
@@ -650,6 +688,7 @@ mod tests {
                 delay_ms: Some(100),
                 retention: Some(500),
                 max_chunk_size: Some(300),
+                prune_concurrency: Some(1),
                 extra: _,
             },
         );
@@ -737,6 +776,7 @@ mod tests {
                 delay_ms: 200,
                 retention: 300,
                 max_chunk_size: 400,
+                prune_concurrency: 1,
             }),
         };
 
@@ -753,6 +793,7 @@ mod tests {
                     delay_ms: 200,
                     retention: 300,
                     max_chunk_size: 400,
+                    prune_concurrency: 1,
                 }),
             },
         );

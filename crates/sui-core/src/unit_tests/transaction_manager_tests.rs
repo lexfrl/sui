@@ -60,7 +60,7 @@ fn get_input_keys(objects: &[Object]) -> Vec<InputKey> {
     objects
         .iter()
         .map(|object| InputKey::VersionedObject {
-            id: object.id(),
+            id: object.full_id(),
             version: object.version(),
         })
         .collect()
@@ -237,7 +237,7 @@ async fn transaction_manager_object_dependency() {
         .epoch_store_for_testing()
         .set_shared_object_versions_for_testing(
             transaction_read_0.digest(),
-            vec![(
+            &[(
                 (
                     shared_object.id(),
                     shared_object.owner().start_version().unwrap(),
@@ -250,7 +250,7 @@ async fn transaction_manager_object_dependency() {
         .epoch_store_for_testing()
         .set_shared_object_versions_for_testing(
             transaction_read_1.digest(),
-            vec![(
+            &[(
                 (
                     shared_object.id(),
                     shared_object.owner().start_version().unwrap(),
@@ -274,7 +274,7 @@ async fn transaction_manager_object_dependency() {
         .epoch_store_for_testing()
         .set_shared_object_versions_for_testing(
             transaction_default.digest(),
-            vec![(
+            &[(
                 (
                     shared_object.id(),
                     shared_object.owner().start_version().unwrap(),
@@ -302,7 +302,7 @@ async fn transaction_manager_object_dependency() {
         .epoch_store_for_testing()
         .set_shared_object_versions_for_testing(
             transaction_read_2.digest(),
-            vec![
+            &[
                 (
                     (
                         shared_object.id(),
@@ -340,7 +340,7 @@ async fn transaction_manager_object_dependency() {
     // Notify TM about availability of the first shared object.
     transaction_manager.objects_available(
         vec![InputKey::VersionedObject {
-            id: shared_object.id(),
+            id: shared_object.full_id(),
             version: shared_version,
         }],
         &state.epoch_store_for_testing(),
@@ -377,7 +377,7 @@ async fn transaction_manager_object_dependency() {
     // Make shared_object_2 available.
     transaction_manager.objects_available(
         vec![InputKey::VersionedObject {
-            id: shared_object_2.id(),
+            id: shared_object_2.full_id(),
             version: shared_version_2,
         }],
         &state.epoch_store_for_testing(),
@@ -475,7 +475,7 @@ async fn transaction_manager_receiving_notify_commit() {
         transaction_manager.notify_commit(
             txn.digest(),
             vec![InputKey::VersionedObject {
-                id: object.id(),
+                id: object.full_id(),
                 version: object.version().next(),
             }],
             &state.epoch_store_for_testing(),
@@ -827,7 +827,7 @@ async fn transaction_manager_with_cancelled_transactions() {
         .epoch_store_for_testing()
         .set_shared_object_versions_for_testing(
             cancelled_transaction.digest(),
-            vec![
+            &[
                 (
                     (
                         shared_object_1.id(),
@@ -860,7 +860,7 @@ async fn transaction_manager_with_cancelled_transactions() {
     // Notify TM about availability of the owned object.
     transaction_manager.objects_available(
         vec![InputKey::VersionedObject {
-            id: owned_object.id(),
+            id: owned_object.full_id(),
             version: owned_version,
         }],
         &state.epoch_store_for_testing(),

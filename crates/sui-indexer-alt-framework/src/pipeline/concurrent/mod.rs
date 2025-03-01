@@ -4,14 +4,17 @@
 use std::{sync::Arc, time::Duration};
 
 use serde::{Deserialize, Serialize};
-use sui_field_count::FieldCount;
-use sui_pg_db::{self as db, Db};
-use sui_types::full_checkpoint_content::CheckpointData;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
-use crate::{metrics::IndexerMetrics, watermarks::CommitterWatermark};
+use crate::{
+    db::{self, Db},
+    metrics::IndexerMetrics,
+    models::watermarks::CommitterWatermark,
+    types::full_checkpoint_content::CheckpointData,
+    FieldCount,
+};
 
 use super::{processor::processor, CommitterConfig, Processor, WatermarkPart, PIPELINE_BUFFER};
 
@@ -111,6 +114,9 @@ pub struct PrunerConfig {
 
     /// The maximum range to try and prune in one request, measured in checkpoints.
     pub max_chunk_size: u64,
+
+    /// The max number of tasks to run in parallel for pruning.
+    pub prune_concurrency: u64,
 }
 
 /// Values ready to be written to the database. This is an internal type used to communicate
@@ -162,6 +168,7 @@ impl Default for PrunerConfig {
             delay_ms: 120_000,
             retention: 4_000_000,
             max_chunk_size: 2_000,
+            prune_concurrency: 1,
         }
     }
 }

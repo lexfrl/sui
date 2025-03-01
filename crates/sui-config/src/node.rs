@@ -33,7 +33,7 @@ use sui_types::traffic_control::{PolicyConfig, RemoteFirewallConfig};
 
 use sui_types::crypto::{get_key_pair_from_rng, AccountKeyPair, AuthorityKeyPair};
 use sui_types::multiaddr::Multiaddr;
-use tracing::info;
+use tracing::{error, info};
 
 // Default max number of concurrent requests served
 pub const DEFAULT_GRPC_CONCURRENCY_LIMIT: usize = 20000000000;
@@ -123,9 +123,6 @@ pub struct NodeConfig {
     pub db_checkpoint_config: DBCheckpointConfig,
 
     #[serde(default)]
-    pub indirect_objects_threshold: usize,
-
-    #[serde(default)]
     pub expensive_safety_check_config: ExpensiveSafetyCheckConfig,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -204,6 +201,18 @@ pub struct NodeConfig {
     /// By default, write stall is enabled on validators but not on fullnodes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enable_db_write_stall: Option<bool>,
+
+    /// Size of the channel used for buffering local execution time observations.
+    ///
+    /// If unspecified, this will default to `128`.
+    #[serde(default = "default_local_execution_time_channel_capacity")]
+    pub local_execution_time_channel_capacity: usize,
+
+    /// Size of the LRU cache used for storing local execution time observations.
+    ///
+    /// If unspecified, this will default to `10000`.
+    #[serde(default = "default_local_execution_time_cache_size")]
+    pub local_execution_time_cache_size: usize,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -467,7 +476,6 @@ pub fn default_zklogin_oauth_providers() -> BTreeMap<Chain, BTreeSet<String>> {
         "Threedos".to_string(),
         "Onefc".to_string(),
         "FanTV".to_string(),
-        "AwsTenant-region:us-east-1-tenant_id:us-east-1_LPSLCkC3A".to_string(), // test tenant in mysten aws
         "AwsTenant-region:us-east-1-tenant_id:us-east-1_qPsZxYqd8".to_string(), // Ambrus, external partner
         "Arden".to_string(),                                                    // Arden partner
         "AwsTenant-region:eu-west-3-tenant_id:eu-west-3_gGVCx53Es".to_string(), // Trace, external partner
@@ -542,6 +550,14 @@ pub fn default_concurrency_limit() -> Option<usize> {
 
 pub fn default_end_of_epoch_broadcast_channel_capacity() -> usize {
     128
+}
+
+pub fn default_local_execution_time_channel_capacity() -> usize {
+    128
+}
+
+pub fn default_local_execution_time_cache_size() -> usize {
+    10000
 }
 
 pub fn bool_true() -> bool {
@@ -638,6 +654,13 @@ impl NodeConfig {
 
     pub fn rpc(&self) -> Option<&sui_rpc_api::Config> {
         self.rpc.as_ref()
+    }
+
+    pub fn local_execution_time_cache_size(&self) -> NonZeroUsize {
+        NonZeroUsize::new(self.local_execution_time_cache_size).unwrap_or_else(|| {
+            error!("local_execution_time_cache_size must be non-zero - defaulting to 10000");
+            NonZeroUsize::new(10000).unwrap()
+        })
     }
 }
 
@@ -814,7 +837,7 @@ impl ExpensiveSafetyCheckConfig {
 }
 
 fn default_checkpoint_execution_max_concurrency() -> usize {
-    200
+    40
 }
 
 fn default_local_execution_timeout_sec() -> u64 {
@@ -871,6 +894,13 @@ pub struct AuthorityStorePruningConfig {
     pub killswitch_tombstone_pruning: bool,
     #[serde(default = "default_smoothing", skip_serializing_if = "is_true")]
     pub smooth: bool,
+    /// Enables the compaction filter for pruning the objects table.
+    /// If disabled, a range deletion approach is used instead.
+    /// While it is generally safe to switch between the two modes,
+    /// switching from the compaction filter approach back to range deletion
+    /// may result in some old versions that will never be pruned.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub enable_compaction_filter: bool,
 }
 
 fn default_num_latest_epoch_dbs_to_retain() -> usize {
@@ -910,6 +940,7 @@ impl Default for AuthorityStorePruningConfig {
             num_epochs_to_retain_for_checkpoints: if cfg!(msim) { Some(2) } else { None },
             killswitch_tombstone_pruning: false,
             smooth: true,
+            enable_compaction_filter: cfg!(test) || cfg!(msim),
         }
     }
 }
@@ -1399,5 +1430,12 @@ impl RunWithRange {
 
     pub fn matches_checkpoint(&self, seq_num: CheckpointSequenceNumber) -> bool {
         matches!(self, RunWithRange::Checkpoint(seq) if *seq == seq_num)
+    }
+
+    pub fn into_checkpoint_bound(self) -> Option<CheckpointSequenceNumber> {
+        match self {
+            RunWithRange::Epoch(_) => None,
+            RunWithRange::Checkpoint(seq) => Some(seq),
+        }
     }
 }

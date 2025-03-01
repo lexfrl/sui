@@ -189,9 +189,11 @@ impl SimulatorStore for PersistedStore {
     fn get_highest_checkpint(&self) -> Option<VerifiedCheckpoint> {
         self.read_write
             .checkpoints
-            .unbounded_iter()
-            .skip_to_last()
+            .reversed_safe_iter_with_bounds(None, None)
+            .expect("failed to fetch highest checkpoint")
             .next()
+            .transpose()
+            .expect("failed to fetch highest checkpoint")
             .map(|(_, checkpoint)| checkpoint.into())
     }
 
@@ -457,6 +459,8 @@ impl ChildObjectResolver for PersistedStore {
         receiving_object_id: &ObjectID,
         receive_object_at_version: SequenceNumber,
         _epoch_id: EpochId,
+        // TODO: Delete this parameter once table migration is complete.
+        _use_object_per_epoch_marker_table_v2: bool,
     ) -> sui_types::error::SuiResult<Option<Object>> {
         let recv_object = match SimulatorStore::get_object(self, receiving_object_id) {
             None => return Ok(None),
@@ -554,9 +558,9 @@ impl ReadStore for PersistedStoreInnerReadOnlyWrapper {
         self.sync();
         self.inner
             .checkpoints
-            .unbounded_iter()
-            .skip_to_last()
+            .reversed_safe_iter_with_bounds(None, None)?
             .next()
+            .transpose()?
             .map(|(_, checkpoint)| checkpoint.into())
             .ok_or(SuiError::UserInputError {
                 error: UserInputError::LatestCheckpointSequenceNumberNotFound,

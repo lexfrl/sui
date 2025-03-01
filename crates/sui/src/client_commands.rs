@@ -6,6 +6,7 @@ use crate::{
     client_ptb::ptb::PTB,
     displays::Pretty,
     key_identity::{get_identity_address, KeyIdentity},
+    upgrade_compatibility::check_compatibility,
     verifier_meter::{AccumulatingMeter, Accumulator},
 };
 use std::{
@@ -51,7 +52,7 @@ use sui_json_rpc_types::{
 use sui_keys::keystore::AccountKeystore;
 use sui_move_build::{
     build_from_resolution_graph, check_invalid_dependencies, check_unpublished_dependencies,
-    gather_published_ids, BuildConfig, CompiledPackage, PackageDependencies,
+    gather_published_ids, BuildConfig, CompiledPackage,
 };
 use sui_package_management::{LockCommand, PublishedAtError};
 use sui_replay::ReplayToolCommand;
@@ -93,6 +94,7 @@ use tabled::{
     },
 };
 
+use sui_types::digests::ChainIdentifier;
 use tracing::{debug, info};
 
 #[path = "unit_tests/profiler_tests.rs"]
@@ -358,10 +360,15 @@ pub enum SuiClientCommands {
         #[clap(flatten)]
         opts: OptsWithGas,
 
-        /// Publish the package without checking whether compiling dependencies from source results
-        /// in bytecode matching the dependencies found on-chain.
+        /// Publish the package without checking whether dependency source code compiles to the
+        /// on-chain bytecode
         #[clap(long)]
         skip_dependency_verification: bool,
+
+        /// Check that the dependency source code compiles to the on-chain bytecode before
+        /// publishing the package (currently the default behavior)
+        #[clap(long, conflicts_with = "skip_dependency_verification")]
+        verify_deps: bool,
 
         /// Also publish transitive dependencies that have not already been published.
         #[clap(long)]
@@ -459,10 +466,19 @@ pub enum SuiClientCommands {
         #[clap(flatten)]
         opts: OptsWithGas,
 
-        /// Publish the package without checking whether compiling dependencies from source results
-        /// in bytecode matching the dependencies found on-chain.
+        /// Verify package compatibility locally before publishing.
+        #[clap(long)]
+        verify_compatibility: bool,
+
+        /// Upgrade the package without checking whether dependency source code compiles to the on-chain
+        /// bytecode
         #[clap(long)]
         skip_dependency_verification: bool,
+
+        /// Check that the dependency source code compiles to the on-chain bytecode before
+        /// upgrading the package (currently the default behavior)
+        #[clap(long, conflicts_with = "skip_dependency_verification")]
+        verify_deps: bool,
 
         /// Also publish transitive dependencies that have not already been published.
         #[clap(long)]
@@ -866,6 +882,8 @@ impl SuiClientCommands {
                 upgrade_capability,
                 build_config,
                 skip_dependency_verification,
+                verify_deps,
+                verify_compatibility,
                 with_unpublished_dependencies,
                 opts,
             } => {
@@ -873,9 +891,23 @@ impl SuiClientCommands {
                 let sender = sender.unwrap_or(context.active_address()?);
                 let client = context.get_client().await?;
                 let chain_id = client.read_api().get_chain_identifier().await.ok();
+                let protocol_version = client
+                    .read_api()
+                    .get_protocol_config(None)
+                    .await?
+                    .protocol_version;
+                let protocol_config = ProtocolConfig::get_for_version(
+                    protocol_version,
+                    match chain_id
+                        .as_ref()
+                        .and_then(ChainIdentifier::from_chain_short_id)
+                    {
+                        Some(chain_id) => chain_id.chain(),
+                        None => Chain::Unknown,
+                    },
+                );
 
                 check_protocol_version_and_warn(&client).await?;
-
                 let package_path =
                     package_path
                         .canonicalize()
@@ -898,16 +930,20 @@ impl SuiClientCommands {
                     .get_active_env()
                     .map(|e| e.alias.clone())
                     .ok();
+                let verify =
+                    check_dep_verification_flags(skip_dependency_verification, verify_deps)?;
+
                 let upgrade_result = upgrade_package(
                     client.read_api(),
                     build_config.clone(),
                     &package_path,
                     upgrade_capability,
                     with_unpublished_dependencies,
-                    skip_dependency_verification,
+                    !verify,
                     env_alias,
                 )
                 .await;
+
                 // Restore original ID, then check result.
                 if let (Some(chain_id), Some(previous_id)) = (chain_id, previous_id) {
                     let _ = sui_package_management::set_package_id(
@@ -917,15 +953,35 @@ impl SuiClientCommands {
                         previous_id,
                     )?;
                 }
-                let (package_id, compiled_modules, dependencies, package_digest, upgrade_policy, _) =
-                    upgrade_result?;
+
+                let (upgrade_policy, compiled_package) =
+                    upgrade_result.map_err(|e| anyhow!("{e}"))?;
+
+                let compiled_modules =
+                    compiled_package.get_package_bytes(with_unpublished_dependencies);
+                let package_id = compiled_package.published_at.clone()?;
+                let package_digest =
+                    compiled_package.get_package_digest(with_unpublished_dependencies);
+                let dep_ids = compiled_package.get_published_dependencies_ids();
+
+                if verify_compatibility {
+                    check_compatibility(
+                        &client,
+                        package_id,
+                        compiled_package,
+                        package_path,
+                        upgrade_policy,
+                        protocol_config,
+                    )
+                    .await?;
+                }
 
                 let tx_kind = client
                     .transaction_builder()
                     .upgrade_tx_kind(
                         package_id,
                         compiled_modules,
-                        dependencies.published.into_values().collect(),
+                        dep_ids,
                         upgrade_capability,
                         upgrade_policy,
                         package_digest.to_vec(),
@@ -961,6 +1017,7 @@ impl SuiClientCommands {
                 package_path,
                 build_config,
                 skip_dependency_verification,
+                verify_deps,
                 with_unpublished_dependencies,
                 opts,
             } => {
@@ -985,7 +1042,6 @@ impl SuiClientCommands {
                 let chain_id = client.read_api().get_chain_identifier().await.ok();
 
                 check_protocol_version_and_warn(&client).await?;
-
                 let package_path =
                     package_path
                         .canonicalize()
@@ -1003,12 +1059,15 @@ impl SuiClientCommands {
                 } else {
                     None
                 };
+                let verify =
+                    check_dep_verification_flags(skip_dependency_verification, verify_deps)?;
+
                 let compile_result = compile_package(
                     client.read_api(),
                     build_config.clone(),
                     &package_path,
                     with_unpublished_dependencies,
-                    skip_dependency_verification,
+                    !verify,
                 )
                 .await;
                 // Restore original ID, then check result.
@@ -1020,15 +1079,15 @@ impl SuiClientCommands {
                         previous_id,
                     )?;
                 }
-                let (dependencies, compiled_modules, _, _) = compile_result?;
+
+                let compiled_package = compile_result?;
+                let compiled_modules =
+                    compiled_package.get_package_bytes(with_unpublished_dependencies);
+                let dep_ids = compiled_package.get_published_dependencies_ids();
 
                 let tx_kind = client
                     .transaction_builder()
-                    .publish_tx_kind(
-                        sender,
-                        compiled_modules,
-                        dependencies.published.into_values().collect(),
-                    )
+                    .publish_tx_kind(sender, compiled_modules, dep_ids)
                     .await?;
                 let result = dry_run_or_execute_or_serialize(
                     sender, tx_kind, context, None, None, opts.gas, opts.rest,
@@ -1673,6 +1732,36 @@ impl SuiClientCommands {
     }
 }
 
+/// Process the `--skip-dependency-verification` and `--verify-dependencies` flags for a publish or
+/// upgrade command. Prints deprecation warnings as appropriate and returns true if the
+/// dependencies should be verified
+fn check_dep_verification_flags(
+    skip_dependency_verification: bool,
+    verify_dependencies: bool,
+) -> anyhow::Result<bool> {
+    match (skip_dependency_verification, verify_dependencies) {
+        (true, true) => bail!(
+            "[error]: --skip-dependency-verification and --verify-deps are mutually exclusive"
+        ),
+
+        (false, false) => {
+            eprintln!("{}: Dependency sources are no longer verified automatically during publication and upgrade. \
+                You can pass the `--verify-deps` option if you would like to verify them as part of publication or upgrade.",
+                "[Note]".bold().yellow());
+            Ok(verify_dependencies)
+        }
+
+        (true, false) => {
+            eprintln!("{}: Dependency sources are no longer verified automatically during publication and upgrade, \
+                so the `--skip-dependency-verification` flag is no longer necessary.",
+                "[Warning]".bold().yellow());
+            Ok(verify_dependencies)
+        }
+
+        (false, true) => Ok(verify_dependencies),
+    }
+}
+
 fn compile_package_simple(
     build_config: MoveBuildConfig,
     package_path: &Path,
@@ -1685,13 +1774,11 @@ fn compile_package_simple(
         chain_id: chain_id.clone(),
     };
     let resolution_graph = config.resolution_graph(package_path, chain_id.clone())?;
+    let mut compiled_package =
+        build_from_resolution_graph(resolution_graph, false, false, chain_id)?;
+    compiled_package.tree_shake(false)?;
 
-    Ok(build_from_resolution_graph(
-        resolution_graph,
-        false,
-        false,
-        chain_id,
-    )?)
+    Ok(compiled_package)
 }
 
 pub(crate) async fn upgrade_package(
@@ -1702,18 +1789,8 @@ pub(crate) async fn upgrade_package(
     with_unpublished_dependencies: bool,
     skip_dependency_verification: bool,
     env_alias: Option<String>,
-) -> Result<
-    (
-        ObjectID,
-        Vec<Vec<u8>>,
-        PackageDependencies,
-        [u8; 32],
-        u8,
-        CompiledPackage,
-    ),
-    anyhow::Error,
-> {
-    let (dependencies, compiled_modules, compiled_package, package_id) = compile_package(
+) -> Result<(u8, CompiledPackage), anyhow::Error> {
+    let mut compiled_package = compile_package(
         read_api,
         build_config,
         package_path,
@@ -1721,8 +1798,9 @@ pub(crate) async fn upgrade_package(
         skip_dependency_verification,
     )
     .await?;
+    compiled_package.tree_shake(with_unpublished_dependencies)?;
 
-    let package_id = package_id.map_err(|e| match e {
+    compiled_package.published_at.as_ref().map_err(|e| match e {
         PublishedAtError::NotPresent => {
             anyhow!("No 'published-at' field in Move.toml or 'published-id' in Move.lock for package to be upgraded.")
         }
@@ -1771,16 +1849,8 @@ pub(crate) async fn upgrade_package(
     // policy at the moment. To change the policy you can call a Move function in the
     // `package` module to change this policy.
     let upgrade_policy = upgrade_cap.policy;
-    let package_digest = compiled_package.get_package_digest(with_unpublished_dependencies);
 
-    Ok((
-        package_id,
-        compiled_modules,
-        dependencies,
-        package_digest,
-        upgrade_policy,
-        compiled_package,
-    ))
+    Ok((upgrade_policy, compiled_package))
 }
 
 pub(crate) async fn compile_package(
@@ -1789,15 +1859,7 @@ pub(crate) async fn compile_package(
     package_path: &Path,
     with_unpublished_dependencies: bool,
     skip_dependency_verification: bool,
-) -> Result<
-    (
-        PackageDependencies,
-        Vec<Vec<u8>>,
-        CompiledPackage,
-        Result<ObjectID, PublishedAtError>,
-    ),
-    anyhow::Error,
-> {
+) -> Result<CompiledPackage, anyhow::Error> {
     let config = resolve_lock_file_path(build_config, Some(package_path))?;
     let run_bytecode_verifier = true;
     let print_diags_to_stderr = true;
@@ -1809,17 +1871,18 @@ pub(crate) async fn compile_package(
         chain_id: chain_id.clone(),
     };
     let resolution_graph = config.resolution_graph(package_path, chain_id.clone())?;
-    let (package_id, dependencies) = gather_published_ids(&resolution_graph, chain_id.clone());
+    let (_, dependencies) = gather_published_ids(&resolution_graph, chain_id.clone());
     check_invalid_dependencies(&dependencies.invalid)?;
     if !with_unpublished_dependencies {
         check_unpublished_dependencies(&dependencies.unpublished)?;
     };
-    let compiled_package = build_from_resolution_graph(
+    let mut compiled_package = build_from_resolution_graph(
         resolution_graph,
         run_bytecode_verifier,
         print_diags_to_stderr,
         chain_id,
     )?;
+    compiled_package.tree_shake(with_unpublished_dependencies)?;
     let protocol_config = read_api.get_protocol_config(None).await?;
 
     // Check that the package's Move version is compatible with the chain's
@@ -1882,7 +1945,6 @@ pub(crate) async fn compile_package(
     if with_unpublished_dependencies {
         compiled_package.verify_unpublished_dependencies(&dependencies.unpublished)?;
     }
-    let compiled_modules = compiled_package.get_package_bytes(with_unpublished_dependencies);
     if !skip_dependency_verification {
         let verifier = BytecodeSourceVerifier::new(read_api);
         if let Err(e) = verifier
@@ -1924,7 +1986,7 @@ pub(crate) async fn compile_package(
             error: format!("Failed to update Move.lock toolchain version: {e}"),
         })?;
 
-    Ok((dependencies, compiled_modules, compiled_package, package_id))
+    Ok(compiled_package)
 }
 
 impl Display for SuiClientCommandResult {
@@ -2781,10 +2843,10 @@ pub async fn estimate_gas_budget(
         execute_dry_run(context, signer, kind, None, gas_price, gas_payment, sponsor).await;
     if let Ok(SuiClientCommandResult::DryRun(dry_run)) = dry_run {
         let rgp = client.read_api().get_reference_gas_price().await?;
-        return Ok(estimate_gas_budget_from_gas_cost(
+        Ok(estimate_gas_budget_from_gas_cost(
             dry_run.effects.gas_cost_summary(),
             rgp,
-        ));
+        ))
     } else {
         bail!(
             "Could not determine the gas budget. Error: {}",

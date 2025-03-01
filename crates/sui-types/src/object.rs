@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use serde_with::Bytes;
 
-use crate::base_types::{MoveObjectType, ObjectIDParseError};
+use crate::base_types::{FullObjectID, FullObjectRef, MoveObjectType, ObjectIDParseError};
 use crate::coin::{Coin, CoinMetadata, TreasuryCap};
 use crate::crypto::{default_hash, deterministic_random_account_key};
 use crate::error::{ExecutionError, ExecutionErrorKind, UserInputError, UserInputResult};
@@ -132,19 +132,14 @@ impl MoveObject {
         }
     }
 
-    pub fn new_coin(
-        coin_type: MoveObjectType,
-        version: SequenceNumber,
-        id: ObjectID,
-        value: u64,
-    ) -> Self {
+    pub fn new_coin(coin_type: TypeTag, version: SequenceNumber, id: ObjectID, value: u64) -> Self {
         // unwrap safe because coins are always smaller than the max object size
         unsafe {
             Self::new_from_execution_with_limit(
-                coin_type,
+                MoveObjectType::coin(coin_type),
                 true,
                 version,
-                GasCoin::new(id, value).to_bcs_bytes(),
+                Coin::new(id, value).to_bcs_bytes(),
                 256,
             )
             .unwrap()
@@ -565,6 +560,10 @@ impl Owner {
     pub fn is_shared(&self) -> bool {
         matches!(self, Owner::Shared { .. })
     }
+
+    pub fn is_consensus(&self) -> bool {
+        matches!(self, Owner::Shared { .. } | Owner::ConsensusV2 { .. })
+    }
 }
 
 impl PartialEq<ObjectID> for Owner {
@@ -811,6 +810,10 @@ impl ObjectInner {
         self.owner.is_shared()
     }
 
+    pub fn is_consensus(&self) -> bool {
+        self.owner.is_consensus()
+    }
+
     pub fn get_single_owner(&self) -> Option<SuiAddress> {
         self.owner.get_owner_address().ok()
     }
@@ -830,6 +833,10 @@ impl ObjectInner {
         (self.id(), self.version(), self.digest())
     }
 
+    pub fn compute_full_object_reference(&self) -> FullObjectRef {
+        (self.full_id(), self.version(), self.digest())
+    }
+
     pub fn digest(&self) -> ObjectDigest {
         ObjectDigest::new(default_hash(self))
     }
@@ -840,6 +847,15 @@ impl ObjectInner {
         match &self.data {
             Move(v) => v.id(),
             Package(m) => m.id(),
+        }
+    }
+
+    pub fn full_id(&self) -> FullObjectID {
+        let id = self.id();
+        if let Some(start_version) = self.owner.start_version() {
+            FullObjectID::Consensus((id, start_version))
+        } else {
+            FullObjectID::Fastpath(id)
         }
     }
 

@@ -9,6 +9,7 @@ use fastcrypto::encoding::{Encoding, Hex};
 use fastcrypto::traits::KeyPair;
 use sui_config::node::{
     default_enable_index_processing, default_end_of_epoch_broadcast_channel_capacity,
+    default_local_execution_time_cache_size, default_local_execution_time_channel_capacity,
     AuthorityKeyPairWithPath, AuthorityOverloadConfig, AuthorityStorePruningConfig,
     CheckpointExecutorConfig, DBCheckpointConfig, ExecutionCacheConfig, ExpensiveSafetyCheckConfig,
     Genesis, KeyPairWithPath, StateArchiveConfig, StateSnapshotConfig,
@@ -202,7 +203,6 @@ impl ValidatorConfigBuilder {
             metrics: None,
             supported_protocol_versions: self.supported_protocol_versions,
             db_checkpoint_config: Default::default(),
-            indirect_objects_threshold: usize::MAX,
             // By default, expensive checks will be enabled in debug build, but not in release build.
             expensive_safety_check_config: ExpensiveSafetyCheckConfig::default(),
             name_service_package_address: None,
@@ -218,7 +218,6 @@ impl ValidatorConfigBuilder {
             transaction_kv_store_read_config: Default::default(),
             transaction_kv_store_write_config: None,
             rpc: Some(sui_rpc_api::Config {
-                enable_experimental_rest_api: Some(true),
                 ..Default::default()
             }),
             jwk_fetch_interval_seconds: self
@@ -237,6 +236,8 @@ impl ValidatorConfigBuilder {
             enable_validator_tx_finalizer: true,
             verifier_signing_config: VerifierSigningConfig::default(),
             enable_db_write_stall: None,
+            local_execution_time_channel_capacity: default_local_execution_time_channel_capacity(),
+            local_execution_time_cache_size: default_local_execution_time_cache_size(),
         }
     }
 
@@ -502,7 +503,6 @@ impl FullnodeConfigBuilder {
             metrics: None,
             supported_protocol_versions: self.supported_protocol_versions,
             db_checkpoint_config: self.db_checkpoint_config.unwrap_or_default(),
-            indirect_objects_threshold: usize::MAX,
             expensive_safety_check_config: self
                 .expensive_safety_check_config
                 .unwrap_or_else(ExpensiveSafetyCheckConfig::new_enable_all),
@@ -519,7 +519,6 @@ impl FullnodeConfigBuilder {
             transaction_kv_store_read_config: Default::default(),
             transaction_kv_store_write_config: Default::default(),
             rpc: Some(sui_rpc_api::Config {
-                enable_experimental_rest_api: Some(true),
                 enable_indexing: Some(true),
                 ..Default::default()
             }),
@@ -538,6 +537,8 @@ impl FullnodeConfigBuilder {
             enable_validator_tx_finalizer: false,
             verifier_signing_config: VerifierSigningConfig::default(),
             enable_db_write_stall: None,
+            local_execution_time_channel_capacity: default_local_execution_time_channel_capacity(),
+            local_execution_time_cache_size: default_local_execution_time_cache_size(),
         }
     }
 }

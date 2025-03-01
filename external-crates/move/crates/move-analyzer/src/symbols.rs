@@ -61,7 +61,6 @@ use crate::{
 
 use anyhow::{anyhow, Result};
 use crossbeam::channel::Sender;
-use derivative::*;
 use im::ordmap::OrdMap;
 use lsp_server::{Request, RequestId};
 use lsp_types::{
@@ -69,7 +68,6 @@ use lsp_types::{
     GotoDefinitionParams, Hover, HoverContents, HoverParams, Location, MarkupContent, MarkupKind,
     Position, Range, ReferenceParams, SymbolKind,
 };
-
 use sha2::{Digest, Sha256};
 use std::{
     cmp,
@@ -179,6 +177,12 @@ pub struct SymbolsComputationData {
     /// Module name lengths in access paths for a given module (needs to be appropriately
     /// set before the module processing starts) keyed on a ModuleIdent string
     mod_to_alias_lengths: BTreeMap<String, BTreeMap<Position, usize>>,
+}
+
+impl Default for SymbolsComputationData {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SymbolsComputationData {
@@ -402,16 +406,23 @@ pub struct MemberDef {
 }
 
 /// Definition of a local (or parameter)
-#[allow(clippy::non_canonical_partial_ord_impl)]
-#[derive(Derivative, Debug, Clone, Eq, PartialEq)]
-#[derivative(PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct LocalDef {
     /// Location of the definition
     pub def_loc: Loc,
     /// Type of definition
-    #[derivative(PartialOrd = "ignore")]
-    #[derivative(Ord = "ignore")]
     pub def_type: Type,
+}
+
+impl PartialOrd for LocalDef {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for LocalDef {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.def_loc.cmp(&other.def_loc)
+    }
 }
 
 /// Information about call sites relevant to the IDE
@@ -447,6 +458,12 @@ pub type VariantFieldOrderInfo = BTreeMap<Symbol, BTreeMap<Symbol, BTreeMap<Symb
 pub struct FieldOrderInfo {
     structs: BTreeMap<String, StructFieldOrderInfo>,
     variants: BTreeMap<String, VariantFieldOrderInfo>,
+}
+
+impl Default for FieldOrderInfo {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl FieldOrderInfo {
@@ -1782,37 +1799,72 @@ fn has_precompiled_deps(
     pkg_deps.contains_key(pkg_path)
 }
 
-fn is_parsed_pkg_modified(
-    pkg_def: &P::PackageDefinition,
-    files_to_compile: &BTreeSet<PathBuf>,
+/// Checks if a hash is included in the file hashes list.
+/// We only consider file hashes from files.
+fn hash_included_in_file_hashes(
+    hash: FileHash,
+    modified_files: &BTreeSet<PathBuf>,
     file_hashes: Arc<BTreeMap<PathBuf, FileHash>>,
 ) -> bool {
-    files_to_compile.iter().any(|fpath| {
-        file_hashes
-            .get(fpath)
-            .and_then(|fhash| match &pkg_def.def {
-                P::Definition::Module(mdef) => Some((mdef, fhash)),
-                _ => None,
-            })
-            .map_or(false, |(mdef, fhash)| mdef.loc.file_hash() == *fhash)
+    modified_files.iter().any(|fpath| {
+        file_hashes.get(fpath).map_or_else(
+            || {
+                debug_assert!(false);
+                false
+            },
+            |fhash| hash == *fhash,
+        )
     })
 }
 
-fn is_typed_mod_modified(
-    mdef: &ModuleDefinition,
-    files_to_compile: &BTreeSet<PathBuf>,
+/// Checks if a parsed module has been modified by comparing
+/// file hash in the module with the file hashes provided
+/// as an argument to see if module hash is included in the
+/// hashes provided. We only consider file hashes from modified
+/// files.
+fn is_parsed_mod_modified(
+    mdef: &P::ModuleDefinition,
+    modified_files: &BTreeSet<PathBuf>,
     file_hashes: Arc<BTreeMap<PathBuf, FileHash>>,
 ) -> bool {
-    files_to_compile.iter().any(|fpath| {
-        file_hashes
-            .get(fpath)
-            .map_or(false, |fhash| mdef.loc.file_hash() == *fhash)
-    })
+    !hash_included_in_file_hashes(mdef.loc.file_hash(), modified_files, file_hashes)
+}
+
+/// Checks if a typed module has been modified by comparing
+/// file hash in the module with the file hashes provided
+/// as an argument to see if module hash is included in the
+/// hashes provided. We only consider file hashes from modified
+/// files.
+fn is_typed_mod_modified(
+    mdef: &ModuleDefinition,
+    modified_files: &BTreeSet<PathBuf>,
+    file_hashes: Arc<BTreeMap<PathBuf, FileHash>>,
+) -> bool {
+    !hash_included_in_file_hashes(mdef.loc.file_hash(), modified_files, file_hashes)
+}
+
+/// Checks if a parsed package has been modified by comparing
+/// file hash in the package's modules with the file hashes provided
+/// as an argument to see if all module hashes are included
+/// in the hashes provided. We only consider file hashes from modified
+/// files.
+fn is_parsed_pkg_modified(
+    pkg_def: &P::PackageDefinition,
+    modified_files: &BTreeSet<PathBuf>,
+    file_hashes: Arc<BTreeMap<PathBuf, FileHash>>,
+) -> bool {
+    match &pkg_def.def {
+        P::Definition::Module(mdef) => is_parsed_mod_modified(mdef, modified_files, file_hashes),
+        P::Definition::Address(adef) => adef
+            .modules
+            .iter()
+            .any(|mdef| is_parsed_mod_modified(mdef, modified_files, file_hashes.clone())),
+    }
 }
 
 /// Merges a cached compiled program with newly computed compiled program
 /// In the newly computed program, only modified files are fully compiled
-/// and these files are mereged with the cached compiled program.
+/// and these files are merged with the cached compiled program.
 fn merge_user_programs(
     cached_info_opt: Option<AnalyzedPkgInfo>,
     parsed_program_new: P::Program,
@@ -1829,27 +1881,28 @@ fn merge_user_programs(
     // address maps might have changed but all would be computed in full during
     // incremental compilation as only function bodies are omitted
     parsed_program_cached.named_address_maps = parsed_program_new.named_address_maps;
-    // remove modules from user code that belong to modified files (use cached
-    // file hashes as we are comparing with hashes in cached modules)
+    // remove modules from user code that belong to modified files (use new
+    // file hashes - if cached module's hash is on the list of new file hashes, it means
+    // that nothing changed)
     parsed_program_cached.source_definitions.retain(|pkg_def| {
-        !is_parsed_pkg_modified(pkg_def, &files_to_compile, file_hashes_cached.clone())
+        !is_parsed_pkg_modified(pkg_def, &files_to_compile, file_hashes_new.clone())
     });
     let mut typed_modules_cached_filtered = UniqueMap::new();
     for (mident, mdef) in typed_modules_cached.into_iter() {
-        if !is_typed_mod_modified(&mdef, &files_to_compile, file_hashes_cached.clone()) {
+        if !is_typed_mod_modified(&mdef, &files_to_compile, file_hashes_new.clone()) {
             _ = typed_modules_cached_filtered.add(mident, mdef);
         }
     }
     typed_modules_cached = typed_modules_cached_filtered;
-    // add new modules from user code (use new file hashes as we are comparing with
-    // hashes in new modules)
+    // add new modules from user code (use cached file hashes - if new module's hash is on the list of
+    // cached file hashes, it means that nothing' changed)
     for pkg_def in parsed_program_new.source_definitions {
-        if is_parsed_pkg_modified(&pkg_def, &files_to_compile, file_hashes_new.clone()) {
+        if is_parsed_pkg_modified(&pkg_def, &files_to_compile, file_hashes_cached.clone()) {
             parsed_program_cached.source_definitions.push(pkg_def);
         }
     }
     for (mident, mdef) in typed_program_modules_new.into_iter() {
-        if is_typed_mod_modified(&mdef, &files_to_compile, file_hashes_new.clone()) {
+        if is_typed_mod_modified(&mdef, &files_to_compile, file_hashes_cached.clone()) {
             typed_modules_cached.remove(&mident); // in case new file has new definition of the module
             _ = typed_modules_cached.add(mident, mdef);
         }
@@ -1916,7 +1969,7 @@ pub fn get_compiled_pkg(
     );
     let compiler_flags = resolution_graph.build_options.compiler_flags().clone();
     let build_plan =
-        BuildPlan::create(resolution_graph)?.set_compiler_vfs_root(overlay_fs_root.clone());
+        BuildPlan::create(&resolution_graph)?.set_compiler_vfs_root(overlay_fs_root.clone());
     let mut parsed_ast = None;
     let mut typed_ast = None;
     let mut compiler_info = None;

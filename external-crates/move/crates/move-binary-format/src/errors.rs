@@ -294,7 +294,7 @@ impl PartialVMError {
         self
     }
 
-    /// Append the message `message` to the message field of the VM status, and insert a seperator
+    /// Append the message `message` to the message field of the VM status, and insert a separator
     /// if the original message is non-empty.
     pub fn append_message_with_separator(
         mut self,
@@ -378,7 +378,7 @@ impl fmt::Display for VMError {
 }
 
 ////////////////////////////////////////////////////////////////////////////
-/// Conversion functions from internal VM statuses into external VM statuses
+// Conversion functions from internal VM statuses into external VM statuses
 ////////////////////////////////////////////////////////////////////////////
 
 pub fn offset_out_of_bounds(

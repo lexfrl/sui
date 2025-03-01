@@ -41,6 +41,7 @@ use crate::crypto::poseidon::PoseidonBN254CostParams;
 use crate::crypto::zklogin;
 use crate::crypto::zklogin::{CheckZkloginIdCostParams, CheckZkloginIssuerCostParams};
 use better_any::{Tid, TidAble};
+use crypto::nitro_attestation::{self, NitroAttestationCostParams};
 use crypto::vdf::{self, VDFCostParams};
 use move_binary_format::errors::{PartialVMError, PartialVMResult};
 use move_core_types::{
@@ -167,6 +168,9 @@ pub struct NativesCostTable {
 
     // Receive object
     pub transfer_receive_object_internal_cost_params: TransferReceiveObjectInternalCostParams,
+
+    // nitro attestation
+    pub nitro_attestation_cost_params: NitroAttestationCostParams,
 }
 
 impl NativesCostTable {
@@ -621,9 +625,7 @@ impl NativesCostTable {
                 bls12381_g2_msm_base_cost_per_input: protocol_config
                     .group_ops_bls12381_g2_msm_base_cost_per_input_as_option()
                     .map(Into::into),
-                bls12381_msm_max_len: protocol_config
-                    .group_ops_bls12381_msm_max_len_as_option()
-                    .map(Into::into),
+                bls12381_msm_max_len: protocol_config.group_ops_bls12381_msm_max_len_as_option(),
                 bls12381_pairing_cost: protocol_config
                     .group_ops_bls12381_pairing_cost_as_option()
                     .map(Into::into),
@@ -640,8 +642,7 @@ impl NativesCostTable {
                     .group_ops_bls12381_uncompressed_g1_sum_cost_per_term_as_option()
                     .map(Into::into),
                 bls12381_uncompressed_g1_sum_max_terms: protocol_config
-                    .group_ops_bls12381_uncompressed_g1_sum_max_terms_as_option()
-                    .map(Into::into),
+                    .group_ops_bls12381_uncompressed_g1_sum_max_terms_as_option(),
             },
             vdf_cost_params: VDFCostParams {
                 vdf_verify_cost: protocol_config
@@ -649,6 +650,20 @@ impl NativesCostTable {
                     .map(Into::into),
                 hash_to_input_cost: protocol_config
                     .vdf_hash_to_input_cost_as_option()
+                    .map(Into::into),
+            },
+            nitro_attestation_cost_params: NitroAttestationCostParams {
+                parse_base_cost: protocol_config
+                    .nitro_attestation_parse_base_cost_as_option()
+                    .map(Into::into),
+                parse_cost_per_byte: protocol_config
+                    .nitro_attestation_parse_cost_per_byte_as_option()
+                    .map(Into::into),
+                verify_base_cost: protocol_config
+                    .nitro_attestation_verify_base_cost_as_option()
+                    .map(Into::into),
+                verify_cost_per_cert: protocol_config
+                    .nitro_attestation_verify_cost_per_cert_as_option()
                     .map(Into::into),
             },
         }
@@ -1062,6 +1077,11 @@ pub fn all_natives(silent: bool, protocol_config: &ProtocolConfig) -> NativeFunc
             "ecdsa_k1",
             "secp256k1_keypair_from_seed",
             make_native!(ecdsa_k1::secp256k1_keypair_from_seed),
+        ),
+        (
+            "nitro_attestation",
+            "load_nitro_attestation_internal",
+            make_native!(nitro_attestation::load_nitro_attestation_internal),
         ),
     ];
     let sui_framework_natives_iter =

@@ -4,9 +4,18 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use anyhow::Context;
+use anyhow::Context as _;
+use api::checkpoints::Checkpoints;
+use api::coin::Coins;
+use api::dynamic_fields::DynamicFields;
+use api::move_utils::MoveUtils;
+use api::name_service::NameService;
+use api::objects::{Objects, QueryObjects};
 use api::rpc_module::RpcModule;
-use jsonrpsee::server::{RpcServiceBuilder, ServerBuilder};
+use api::transactions::{QueryTransactions, Transactions};
+use config::RpcConfig;
+use data::system_package_task::{SystemPackageTask, SystemPackageTaskArgs};
+use jsonrpsee::server::{BatchRequestConfig, RpcServiceBuilder, ServerBuilder};
 use metrics::middleware::MetricsLayer;
 use metrics::RpcMetrics;
 use prometheus::Registry;
@@ -17,12 +26,19 @@ use tokio::{join, signal, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tower_layer::Identity;
 use tracing::info;
+use url::Url;
 
-use crate::api::{governance::Governance, Reader};
+use crate::api::governance::Governance;
+use crate::context::Context;
 
 mod api;
 pub mod args;
+pub mod config;
+mod context;
+pub mod data;
+mod error;
 mod metrics;
+mod paginate;
 
 #[derive(clap::Args, Debug, Clone)]
 pub struct RpcArgs {
@@ -30,9 +46,10 @@ pub struct RpcArgs {
     #[clap(long, default_value_t = Self::default().rpc_listen_address)]
     pub rpc_listen_address: SocketAddr,
 
-    /// The maximum number of concurrent connections to accept.
-    #[clap(long, default_value_t = Self::default().max_rpc_connections)]
-    pub max_rpc_connections: u32,
+    /// The maximum number of concurrent requests to accept. If the service receives more than this
+    /// many requests, it will start responding with 429.
+    #[clap(long, default_value_t = Self::default().max_in_flight_requests)]
+    pub max_in_flight_requests: u32,
 }
 
 pub struct RpcService {
@@ -65,14 +82,18 @@ impl RpcService {
     ) -> anyhow::Result<Self> {
         let RpcArgs {
             rpc_listen_address,
-            max_rpc_connections,
+            max_in_flight_requests,
         } = rpc_args;
 
         let metrics = RpcMetrics::new(registry);
 
         let server = ServerBuilder::new()
             .http_only()
-            .max_connections(max_rpc_connections);
+            // `jsonrpsee` calls this a limit on connections, but it is implemented as a limit on
+            // requests.
+            .max_connections(max_in_flight_requests)
+            .max_response_body_size(u32::MAX)
+            .set_batch_request_config(BatchRequestConfig::Disabled);
 
         let schema = Project::new(
             env!("CARGO_PKG_VERSION"),
@@ -136,6 +157,14 @@ impl RpcService {
 
         let handle = server
             .set_rpc_middleware(middleware)
+            .set_http_middleware(
+                tower::builder::ServiceBuilder::new().layer(
+                    tower_http::cors::CorsLayer::new()
+                        .allow_methods([http::Method::GET, http::Method::POST])
+                        .allow_origin(tower_http::cors::Any)
+                        .allow_headers(tower_http::cors::Any),
+                ),
+            )
             .build(rpc_listen_address)
             .await
             .context("Failed to bind JSON-RPC service")?
@@ -174,25 +203,56 @@ impl Default for RpcArgs {
     fn default() -> Self {
         Self {
             rpc_listen_address: "0.0.0.0:6000".parse().unwrap(),
-            max_rpc_connections: 100,
+            max_in_flight_requests: 2000,
         }
     }
 }
 
+/// Set-up and run the RPC service, using the provided arguments (expected to be extracted from the
+/// command-line). The service will continue to run until the cancellation token is triggered, and
+/// will signal cancellation on the token when it is shutting down.
+///
+/// The service may spin up auxiliary services (such as the system package task) to support itself,
+/// and will clean these up on shutdown as well.
 pub async fn start_rpc(
+    database_url: Url,
     db_args: DbArgs,
     rpc_args: RpcArgs,
+    system_package_task_args: SystemPackageTaskArgs,
+    rpc_config: RpcConfig,
     registry: &Registry,
     cancel: CancellationToken,
 ) -> anyhow::Result<JoinHandle<()>> {
-    let mut rpc =
-        RpcService::new(rpc_args, registry, cancel).context("Failed to create RPC service")?;
+    let mut rpc = RpcService::new(rpc_args, registry, cancel.child_token())
+        .context("Failed to create RPC service")?;
 
-    let reader = Reader::new(db_args, rpc.metrics(), registry).await?;
+    let context = Context::new(database_url, db_args, rpc_config, rpc.metrics(), registry).await?;
 
-    rpc.add_module(Governance(reader.clone()))?;
+    let system_package_task = SystemPackageTask::new(
+        context.clone(),
+        system_package_task_args,
+        cancel.child_token(),
+    );
 
-    rpc.run().await.context("Failed to start RPC service")
+    rpc.add_module(Checkpoints(context.clone()))?;
+    rpc.add_module(Coins(context.clone()))?;
+    rpc.add_module(DynamicFields(context.clone()))?;
+    rpc.add_module(Governance(context.clone()))?;
+    rpc.add_module(MoveUtils(context.clone()))?;
+    rpc.add_module(NameService(context.clone()))?;
+    rpc.add_module(Objects(context.clone()))?;
+    rpc.add_module(QueryObjects(context.clone()))?;
+    rpc.add_module(QueryTransactions(context.clone()))?;
+    rpc.add_module(Transactions(context.clone()))?;
+
+    let h_rpc = rpc.run().await.context("Failed to start RPC service")?;
+    let h_system_package_task = system_package_task.run();
+
+    Ok(tokio::spawn(async move {
+        let _ = h_rpc.await;
+        cancel.cancel();
+        let _ = h_system_package_task.await;
+    }))
 }
 
 #[cfg(test)]
